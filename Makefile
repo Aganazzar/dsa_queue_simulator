@@ -9,7 +9,7 @@ INCLUDE_DIR = include
 BUILD_DIR = build
 
 # Source files
-SIMULATOR_SOURCES = src/simulator.c 
+SIMULATOR_SOURCES = src/simulator.c src/receiver.c
 GENERATOR_SOURCES = src/traffic_generator.c 
 
 # Object files
