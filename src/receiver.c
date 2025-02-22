@@ -6,6 +6,7 @@
 
 #define PORT 5000
 #define BUFFER_SIZE 100
+#define VEHICLE_FILE "vehicles.data"
 
 int main() {
     int server_fd, new_socket;
@@ -45,13 +46,25 @@ int main() {
 
     printf("Client connected...\n");
 
+    FILE *file;
     while (1) {
         int bytes_read = read(new_socket, buffer, BUFFER_SIZE);
         if (bytes_read <= 0) {
             printf("Client disconnected.\n");
             break;
         }
+
         printf("Received: %s\n", buffer);
+
+        // Append received vehicle data to vehicles.data
+        file = fopen(VEHICLE_FILE, "a");
+        if (file == NULL) {
+            perror("Error opening file");
+            continue;
+        }
+        fprintf(file, "%s\n", buffer);
+        fclose(file);
+
         memset(buffer, 0, BUFFER_SIZE); // Clear buffer
     }
 
