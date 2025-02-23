@@ -5,17 +5,44 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define MAX_LINE_LENGTH 20
-#define MAIN_FONT "/usr/share/fonts/TTF/DejaVuSans.ttf"
+#define MAIN_FONT "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 800
 #define SCALE 1
 #define ROAD_WIDTH 150
 #define LANE_WIDTH 50
 #define ARROW_SIZE 15
+#define MAX_QUEUE_SIZE 100
+#define MAX_VEHICLES 100
+#define VEHICLE_FILE "vehicles.data"
 
-const char *VEHICLE_FILE = "vehicles.data";
+
+//const char *VEHICLE_FILE = "vehicles.data";
+
+
+// Structure for a vehicle
+typedef struct Vehicle {
+    char vehicle_number[10];
+    struct Vehicle* next;
+} Vehicle;
+
+// Queue structure for vehicles
+typedef struct Queue {
+    Vehicle* front;
+    Vehicle* rear;
+    int count;
+} Queue;
+
+Queue queueA = {NULL, NULL, 0};
+Queue queueB = {NULL, NULL, 0};
+Queue queueC = {NULL, NULL, 0};
+Queue queueD = {NULL, NULL, 0};
+Queue* priorityLane = &queueA;  // Default priority lane
+
+pthread_mutex_t lock;  // Mutex for thread safety
 
 typedef struct
 {
@@ -280,52 +307,120 @@ void refreshLight(SDL_Renderer *renderer, SharedData *sharedData)
     fflush(stdout);
 }
 
-void *chequeQueue(void *arg)
-{
-    SharedData *sharedData = (SharedData *)arg;
-    int i = 1;
-    while (1)
-    {
-        sharedData->nextLight = 0;
-        sleep(5);
-        sharedData->nextLight = 2;
-        sleep(5);
+// Function to initialize a queue
+void initQueue(Queue* queue) {
+    queue->front = queue->rear = NULL;
+    queue->count = 0;
+}
+
+// Function to enqueue a vehicle
+void enqueue(Queue* queue, char* vehicleNum) {
+    Vehicle* newVehicle = (Vehicle*)malloc(sizeof(Vehicle));
+    if (!newVehicle) {
+        perror("Memory allocation failed");
+        return;
+    }
+    strcpy(newVehicle->vehicle_number, vehicleNum);
+    newVehicle->next = NULL;
+
+    pthread_mutex_lock(&lock);  // Lock queue
+    if (queue->rear == NULL) {
+        queue->front = queue->rear = newVehicle;
+    } else {
+        queue->rear->next = newVehicle;
+        queue->rear = newVehicle;
+    }
+    queue->count++;
+    pthread_mutex_unlock(&lock);  // Unlock queue
+}
+
+// Function to dequeue a vehicle
+Vehicle* dequeue(Queue* queue) {
+    if (queue->front == NULL) {
+        return NULL;
+    }
+
+    pthread_mutex_lock(&lock);  // Lock queue
+    Vehicle* temp = queue->front;
+    queue->front = queue->front->next;
+    if (queue->front == NULL) {
+        queue->rear = NULL;
+    }
+    queue->count--;
+    pthread_mutex_unlock(&lock);  // Unlock queue
+
+    return temp;
+}
+
+// Function to check and update priority lane
+void updatePriorityLane() {
+    if (queueA.count > 10) {
+        priorityLane = &queueA;
+    } else {
+        priorityLane = NULL;
     }
 }
 
-// you may need to pass the queue on this function for sharing the data
-void *readAndProcessVehicles(void *arg)
-{
-    while (1)
-    {
-        FILE *file = fopen(VEHICLE_FILE, "r");
-        if (!file)
-        {
+// Thread function to read and process vehicles from file
+void* readAndProcessVehicles(void* arg) {
+    while (1) {
+        FILE* file = fopen(VEHICLE_FILE, "r");
+        if (!file) {
             perror("Error opening vehicle file");
             sleep(1);
             continue;
         }
 
-        char line[MAX_LINE_LENGTH];
-        while (fgets(line, sizeof(line), file))
-        {
-            line[strcspn(line, "\n")] = 0; // Remove newline
+        char line[20];
+        while (fgets(line, sizeof(line), file)) {
+            line[strcspn(line, "\n")] = 0;  // Remove newline
+            char* vehicle = strtok(line, ":");
+            char* laneStr = strtok(NULL, ":");
 
-            char *vehicle = strtok(line, ":");
-            char *lane = strtok(NULL, ":");
+            if (vehicle && laneStr) {
+                char lane = laneStr[0];
 
-            if (vehicle && lane)
-            {
-                printf("New Vehicle Added -> Number: %s, Lane: %s\n", vehicle, lane);
-                // TODO: Add vehicle to the appropriate queue
-            }
-            else
-            {
+                if (lane == 'A') enqueue(&queueA, vehicle);
+                else if (lane == 'B') enqueue(&queueB, vehicle);
+                else if (lane == 'C') enqueue(&queueC, vehicle);
+                else if (lane == 'D') enqueue(&queueD, vehicle);
+                else printf("Invalid lane: %c\n", lane);
+
+                printf("New Vehicle Added -> Number: %s, Lane: %c\n", vehicle, lane);  // ✅ FIXED
+                updatePriorityLane();
+            } else {
                 printf("Invalid Data Format: %s\n", line);
             }
         }
-
         fclose(file);
         sleep(2);
+    }
+}
+
+
+// Thread function to process the queue
+void* chequeQueue(void* arg) {
+    SharedData* sharedData = (SharedData*)arg;
+    while (1) {
+        Vehicle* vehicle = NULL;
+
+        // Serve priority lane first (if applicable)
+        if (priorityLane != NULL && priorityLane->count > 5) {
+            vehicle = dequeue(priorityLane);
+            if (vehicle) {
+                printf("🚦 PRIORITY: Vehicle %s from Lane A served!\n", vehicle->vehicle_number);
+                free(vehicle);
+            }
+        } else {
+            // Serve normal lanes in round-robin fashion
+            if ((vehicle = dequeue(&queueA))) printf("Vehicle %s from Lane A served!\n", vehicle->vehicle_number);
+            else if ((vehicle = dequeue(&queueB))) printf("Vehicle %s from Lane B served!\n", vehicle->vehicle_number);
+            else if ((vehicle = dequeue(&queueC))) printf("Vehicle %s from Lane C served!\n", vehicle->vehicle_number);
+            else if ((vehicle = dequeue(&queueD))) printf("Vehicle %s from Lane D served!\n", vehicle->vehicle_number);
+            
+            if (vehicle) free(vehicle);
+        }
+
+        sleep(3);  // Simulate processing time
     }
 }
