@@ -133,6 +133,7 @@ int main()
                 running = false;
 
         refreshGraphics(&sharedData);
+        SDL_Delay(1000);
     }
 
     // Continue the SDL2 UI loop (graphics rendering)
@@ -310,6 +311,7 @@ void drawVehicles()
     {
         SDL_Rect vehicleRect = {WINDOW_WIDTH / 2 - 75, posY, VEHICLE_SIZE, VEHICLE_SIZE};
         SDL_RenderFillRect(renderer, &vehicleRect);
+        printf("Drawing vehicle %s at A posY: %d\n", temp->vehicle_number, posY);
         posY += 30;
         temp = temp->next;
     }
@@ -364,13 +366,17 @@ void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int 
 
 void refreshLight(SDL_Renderer *renderer, SharedData *sharedData)
 {
-    if (sharedData->nextLight == sharedData->currentLight)
-        return;
+   
 
     sharedData->currentLight = (sharedData->currentLight + 1) % 4; // Rotate light
 
     bool isRed[4] = {true, true, true, true};
     isRed[sharedData->currentLight] = false; // Set current active lane to green
+
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); 
+    SDL_RenderClear(renderer);
+    drawRoadsAndLane(renderer);
+
 
     drawTrafficLight(renderer, 375, 200, isRed[0]); // Lane A
     drawTrafficLight(renderer, 375, 500, isRed[1]); // Lane B
@@ -378,6 +384,7 @@ void refreshLight(SDL_Renderer *renderer, SharedData *sharedData)
     drawTrafficLight(renderer, 475, 350, isRed[3]); // Lane D
 
     SDL_RenderPresent(renderer);
+    printf("Traffic light switched to: %d\n", sharedData->currentLight);
 }
 
 // Function to initialize a queue
@@ -474,7 +481,8 @@ void *readAndProcessVehicles(void *arg)
                 char lane = laneStr[0];
 
                 if (lane == 'A')
-                    enqueue(&queueA, vehicle);
+                   {enqueue(&queueA, vehicle);
+                    printf("The issue is here.");}
                 else if (lane == 'B')
                     enqueue(&queueB, vehicle);
                 else if (lane == 'C')
@@ -555,10 +563,6 @@ void refreshGraphics(SharedData *sharedData)
     refreshLight(renderer, sharedData);
     // drawTrafficLight(renderer, (sharedData->currentLight == 2));
 
-    drawTrafficLight(renderer, 375, 200, sharedData->currentLight == 0); // Lane A
-    drawTrafficLight(renderer, 375, 500, sharedData->currentLight == 1); // Lane B
-    drawTrafficLight(renderer, 275, 350, sharedData->currentLight == 2); // Lane C
-    drawTrafficLight(renderer, 475, 350, sharedData->currentLight == 3); // Lane D
 
     SDL_RenderPresent(renderer);
     SDL_UnlockMutex(mutex);
