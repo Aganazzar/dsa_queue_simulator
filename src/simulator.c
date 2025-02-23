@@ -95,7 +95,7 @@ int main()
         return -1;
     }
 
-    SharedData sharedData = {0, 0}; // 0 => all red
+    SharedData sharedData = {3, 3}; // 0 => all red
 
     TTF_Font *font = TTF_OpenFont(MAIN_FONT, 24);
     if (!font)
@@ -367,8 +367,20 @@ void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int 
 void refreshLight(SDL_Renderer *renderer, SharedData *sharedData)
 {
    
+    static Uint32 lastUpdate = 0;
+    Uint32 currentTime = SDL_GetTicks();
 
-    sharedData->currentLight = (sharedData->currentLight + 1) % 4; // Rotate light
+    if (currentTime - lastUpdate < 5000) // Only switch every 5 seconds
+        return;
+    
+    lastUpdate = currentTime; // Update time reference
+
+    printf("Before update: %d\n", sharedData->currentLight);
+    
+    sharedData->currentLight = (sharedData->currentLight + 1) % 4;
+
+    printf("After update: %d\n", sharedData->currentLight);
+
 
     bool isRed[4] = {true, true, true, true};
     isRed[sharedData->currentLight] = false; // Set current active lane to green
@@ -378,13 +390,19 @@ void refreshLight(SDL_Renderer *renderer, SharedData *sharedData)
     drawRoadsAndLane(renderer);
 
 
+
     drawTrafficLight(renderer, 375, 200, isRed[0]); // Lane A
     drawTrafficLight(renderer, 375, 500, isRed[1]); // Lane B
     drawTrafficLight(renderer, 275, 350, isRed[2]); // Lane C
     drawTrafficLight(renderer, 475, 350, isRed[3]); // Lane D
 
     SDL_RenderPresent(renderer);
-    printf("Traffic light switched to: %d\n", sharedData->currentLight);
+    printf("🚦 Traffic light switched to: %d (A=%s, B=%s, C=%s, D=%s)\n",
+           sharedData->currentLight, 
+           isRed[0] ? "Red" : "Green", 
+           isRed[1] ? "Red" : "Green", 
+           isRed[2] ? "Red" : "Green", 
+           isRed[3] ? "Red" : "Green");
 }
 
 // Function to initialize a queue
@@ -509,58 +527,67 @@ void *readAndProcessVehicles(void *arg)
 void *checkQueue(void *arg)
 {
     SharedData *sharedData = (SharedData *)arg;
-    static int refreshCounter = 0;
+    
     while (1)
     {
         Vehicle *vehicle = NULL;
+        
 
-        // Serve priority lane first (if applicable)
+        // Check if the priority lane has more than 5 vehicles
         if (priorityLane != NULL && priorityLane->count > 5)
         {
             vehicle = dequeue(priorityLane);
             if (vehicle)
             {
-                printf("🚦 PRIORITY: Vehicle %s from Lane A served!\n", vehicle->vehicle_number);
+                printf("🚦 PRIORITY: Vehicle %s from Lane %c served!\n", vehicle->vehicle_number, 'A' + (priorityLane == &queueA ? 0 :
+                                                                                                      priorityLane == &queueB ? 1 :
+                                                                                                      priorityLane == &queueC ? 2 : 3));
                 free(vehicle);
+                refreshGraphics(sharedData);
             }
         }
         else
         {
-            // Serve normal lanes in round-robin fashion
-            if ((vehicle = dequeue(&queueA)))
-                printf("Vehicle %s from Lane A served!\n", vehicle->vehicle_number);
-            else if ((vehicle = dequeue(&queueB)))
-                printf("Vehicle %s from Lane B served!\n", vehicle->vehicle_number);
-            else if ((vehicle = dequeue(&queueC)))
-                printf("Vehicle %s from Lane C served!\n", vehicle->vehicle_number);
-            else if ((vehicle = dequeue(&queueD)))
-                printf("Vehicle %s from Lane D served!\n", vehicle->vehicle_number);
+            // Process the normal lane based on the green light
+            int lane = sharedData->currentLight;
+            printf("🚦 Processing vehicles for Lane %c\n", 'A' + lane);
+
+            if (lane == 0)
+                vehicle = dequeue(&queueA);
+            else if (lane == 1)
+                vehicle = dequeue(&queueB);
+            else if (lane == 2)
+                vehicle = dequeue(&queueC);
+            else if (lane == 3)
+                vehicle = dequeue(&queueD);
 
             if (vehicle)
             {
+                printf("🚗 Vehicle %s from Lane %c exited!\n", vehicle->vehicle_number, 'A' + lane);
                 free(vehicle);
-
-                refreshCounter++;
-                if (refreshCounter % 3 == 0)
-                { // ✅ Refresh every 3 vehicles processed
-                    refreshGraphics(sharedData);
-                }
+                refreshGraphics(sharedData);
+            }
+            else
+            {
+                printf("🚦 No vehicle to exit from Lane %c\n", 'A' + lane);
             }
         }
 
-        sleep(3); // Simulate processing time
+        sleep(3); // Simulate time for a vehicle to move
     }
 }
+
 
 void refreshGraphics(SharedData *sharedData)
 {
 
     SDL_LockMutex(mutex);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderClear(renderer);
+    //SDL_RenderClear(renderer);
     drawRoadsAndLane(renderer);
-    drawVehicles(); // ✅ Ensure vehicles are drawn
+    
     refreshLight(renderer, sharedData);
+    drawVehicles(); // ✅ Ensure vehicles are drawn
     // drawTrafficLight(renderer, (sharedData->currentLight == 2));
 
 
