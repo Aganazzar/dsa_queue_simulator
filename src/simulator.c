@@ -18,23 +18,22 @@
 #define MAX_QUEUE_SIZE 100
 #define MAX_VEHICLES 100
 #define VEHICLE_FILE "vehicles.data"
-#define VEHICLE_SIZE 20  // Add this near other #defines
+#define VEHICLE_SIZE 20 // Add this near other #defines
 
-
-
-//const char *VEHICLE_FILE = "vehicles.data";
-
+// const char *VEHICLE_FILE = "vehicles.data";
 
 // Structure for a vehicle
-typedef struct Vehicle {
+typedef struct Vehicle
+{
     char vehicle_number[10];
-    struct Vehicle* next;
+    struct Vehicle *next;
 } Vehicle;
 
 // Queue structure for vehicles
-typedef struct Queue {
-    Vehicle* front;
-    Vehicle* rear;
+typedef struct Queue
+{
+    Vehicle *front;
+    Vehicle *rear;
     int count;
 } Queue;
 
@@ -42,9 +41,9 @@ Queue queueA = {NULL, NULL, 0};
 Queue queueB = {NULL, NULL, 0};
 Queue queueC = {NULL, NULL, 0};
 Queue queueD = {NULL, NULL, 0};
-Queue* priorityLane = &queueA;  // Default priority lane
+Queue *priorityLane = &queueA; // Default priority lane
 
-pthread_mutex_t lock;  // Mutex for thread safety
+pthread_mutex_t lock; // Mutex for thread safety
 
 typedef struct
 {
@@ -53,21 +52,22 @@ typedef struct
 } SharedData;
 
 // SDL2 Global Variables
-SDL_Window* window = NULL;
-SDL_Renderer* renderer = NULL;
-TTF_Font* font = NULL;
+SDL_Window *window = NULL;
+SDL_Renderer *renderer = NULL;
+TTF_Font *font = NULL;
+SDL_mutex *mutex = NULL;
 
 // Function declarations
 bool initializeSDL(SDL_Window **window, SDL_Renderer **renderer);
 void drawRoadsAndLane(SDL_Renderer *renderer);
 void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int y);
-void drawTrafficLight(SDL_Renderer *renderer, bool isRed);
+void drawTrafficLight(SDL_Renderer *renderer, int x, int y, bool isRed);
 void refreshLight(SDL_Renderer *renderer, SharedData *sharedData);
 void *checkQueue(void *arg);
 // void* readAndParseFile(void* arg);
 void *readAndProcessVehicles(void *arg);
-void refreshGraphics();  // Add this before using refreshGraphics()
-void drawVehicles();  // Add this before using drawVehicles()
+void refreshGraphics(SharedData *sharedData); // Add this before using refreshGraphics()
+void drawVehicles();                          // Add this before using drawVehicles()
 
 void printMessageHelper(const char *message, int count)
 {
@@ -86,7 +86,15 @@ int main()
     {
         return -1;
     }
-    SDL_mutex *mutex = SDL_CreateMutex();
+
+    mutex = SDL_CreateMutex(); // ✅ Initialize the global mutex
+
+    if (!mutex)
+    {
+        SDL_Log("Failed to create mutex: %s", SDL_GetError());
+        return -1;
+    }
+
     SharedData sharedData = {0, 0}; // 0 => all red
 
     TTF_Font *font = TTF_OpenFont(MAIN_FONT, 24);
@@ -96,7 +104,13 @@ int main()
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderClear(renderer);
     drawRoadsAndLane(renderer);
-    drawTrafficLight(renderer, false); 
+    // drawTrafficLight(renderer, false);
+
+    drawTrafficLight(renderer, 375, 200, false); // Lane A
+    drawTrafficLight(renderer, 375, 500, false); // Lane B
+    drawTrafficLight(renderer, 275, 350, false); // Lane C
+    drawTrafficLight(renderer, 475, 350, false); // Lane D
+
     // drawLightForB(renderer, false);
     SDL_RenderPresent(renderer);
 
@@ -118,13 +132,13 @@ int main()
             if (event.type == SDL_QUIT)
                 running = false;
 
-                refreshGraphics(); 
+        refreshGraphics(&sharedData);
     }
 
     // Continue the SDL2 UI loop (graphics rendering)
-    while (1)
+    while (running)
     {
-        sleep(10); // Simulating GUI update
+        SDL_Delay(10); // Simulating GUI update
     }
 
     SDL_DestroyMutex(mutex);
@@ -230,20 +244,22 @@ void drawArrwow(SDL_Renderer *renderer, int x1, int y1, int x2, int y2, int x3, 
     }
 }
 
-void drawTrafficLight(SDL_Renderer *renderer, bool isRed)
+void drawTrafficLight(SDL_Renderer *renderer, int x, int y, bool isRed)
 
 {
     // draw light box
     SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255);
-    SDL_Rect lightBox = {400, 300, 50, 30};
+    SDL_Rect lightBox = {x, y, 50, 30};
     SDL_RenderFillRect(renderer, &lightBox);
     // draw light
     if (isRed)
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // red
     else
         SDL_SetRenderDrawColor(renderer, 11, 156, 50, 255); // green
-    SDL_Rect straight_Light = {405, 305, 20, 20};
-    SDL_RenderFillRect(renderer, &straight_Light);
+    // SDL_Rect straight_Light = {405, 305, 20, 20};
+
+    SDL_Rect lightIndicator = {x + 15, y + 5, 20, 20};
+    SDL_RenderFillRect(renderer, &lightIndicator);
     drawArrwow(renderer, 435, 305, 435, 305 + 20, 435 + 10, 305 + 10);
 }
 
@@ -284,39 +300,44 @@ void drawRoadsAndLane(SDL_Renderer *renderer)
     displayText(renderer, font, "C", 770, 400);
 }
 
-void drawVehicles() {
-    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);  // Red color for vehicles
+void drawVehicles()
+{
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // Red color for vehicles
 
-    int posY = 50;  // Lane A position
-    Vehicle* temp = queueA.front;
-    while (temp && posY < 400) {
+    int posY = 50; // Lane A position
+    Vehicle *temp = queueA.front;
+    while (temp && posY < 400)
+    {
         SDL_Rect vehicleRect = {WINDOW_WIDTH / 2 - 75, posY, VEHICLE_SIZE, VEHICLE_SIZE};
         SDL_RenderFillRect(renderer, &vehicleRect);
         posY += 30;
         temp = temp->next;
     }
 
-    posY = 750;  // Lane B position
+    posY = 750; // Lane B position
     temp = queueB.front;
-    while (temp && posY > 400) {
+    while (temp && posY > 400)
+    {
         SDL_Rect vehicleRect = {WINDOW_WIDTH / 2 + 25, posY, VEHICLE_SIZE, VEHICLE_SIZE};
         SDL_RenderFillRect(renderer, &vehicleRect);
         posY -= 30;
         temp = temp->next;
     }
 
-    int posX = 750;  // Lane C position
+    int posX = 750; // Lane C position
     temp = queueC.front;
-    while (temp && posX > 400) {
+    while (temp && posX > 400)
+    {
         SDL_Rect vehicleRect = {posX, WINDOW_HEIGHT / 2 - 75, VEHICLE_SIZE, VEHICLE_SIZE};
         SDL_RenderFillRect(renderer, &vehicleRect);
         posX -= 30;
         temp = temp->next;
     }
 
-    posX = 50;  // Lane D position
+    posX = 50; // Lane D position
     temp = queueD.front;
-    while (temp && posX < 400) {
+    while (temp && posX < 400)
+    {
         SDL_Rect vehicleRect = {posX, WINDOW_HEIGHT / 2 + 25, VEHICLE_SIZE, VEHICLE_SIZE};
         SDL_RenderFillRect(renderer, &vehicleRect);
         posX += 30;
@@ -324,7 +345,6 @@ void drawVehicles() {
     }
     SDL_RenderPresent(renderer);
 }
-
 
 void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int y)
 {
@@ -335,116 +355,140 @@ void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int 
     SDL_FreeSurface(textSurface);
     SDL_Rect textRect = {x, y, 0, 0};
     SDL_QueryTexture(texture, NULL, NULL, &textRect.w, &textRect.h);
-    //SDL_Log("DIM of SDL_Rect %d %d %d %d", textRect.x, textRect.y, textRect.h, textRect.w);
-    // SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    // SDL_Log("TTF_Error: %s\n", TTF_GetError());
+    // SDL_Log("DIM of SDL_Rect %d %d %d %d", textRect.x, textRect.y, textRect.h, textRect.w);
+    //  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    //  SDL_Log("TTF_Error: %s\n", TTF_GetError());
     SDL_RenderCopy(renderer, texture, NULL, &textRect);
     // SDL_Log("TTF_Error: %s\n", TTF_GetError());
 }
+
 void refreshLight(SDL_Renderer *renderer, SharedData *sharedData)
 {
     if (sharedData->nextLight == sharedData->currentLight)
-        return; // early return
+        return;
 
-    if (sharedData->nextLight == 0)
-    { // turn off all lights
-        drawTrafficLight(renderer, false);  // ✅ FIXED FUNCTION NAME
-    }
-    if (sharedData->nextLight == 2)
-        drawTrafficLight(renderer, true);  // ✅ FIXED FUNCTION NAME
-    else
-        drawTrafficLight(renderer, false);  // ✅ FIXED FUNCTION NAME
+    sharedData->currentLight = (sharedData->currentLight + 1) % 4; // Rotate light
+
+    bool isRed[4] = {true, true, true, true};
+    isRed[sharedData->currentLight] = false; // Set current active lane to green
+
+    drawTrafficLight(renderer, 375, 200, isRed[0]); // Lane A
+    drawTrafficLight(renderer, 375, 500, isRed[1]); // Lane B
+    drawTrafficLight(renderer, 275, 350, isRed[2]); // Lane C
+    drawTrafficLight(renderer, 475, 350, isRed[3]); // Lane D
 
     SDL_RenderPresent(renderer);
-    printf("Light of queue updated from %d to %d\n", sharedData->currentLight, sharedData->nextLight);
-    
-    sharedData->currentLight = sharedData->nextLight;
-    fflush(stdout);
 }
 
-
 // Function to initialize a queue
-void initQueue(Queue* queue) {
+void initQueue(Queue *queue)
+{
     queue->front = queue->rear = NULL;
     queue->count = 0;
 }
 
 // Function to enqueue a vehicle
-void enqueue(Queue* queue, char* vehicleNum) {
-    Vehicle* newVehicle = (Vehicle*)malloc(sizeof(Vehicle));
-    if (!newVehicle) {
+void enqueue(Queue *queue, char *vehicleNum)
+{
+    Vehicle *newVehicle = (Vehicle *)malloc(sizeof(Vehicle));
+    if (!newVehicle)
+    {
         perror("Memory allocation failed");
         return;
     }
     strcpy(newVehicle->vehicle_number, vehicleNum);
     newVehicle->next = NULL;
 
-    pthread_mutex_lock(&lock);  // Lock queue
-    if (queue->rear == NULL) {
+    pthread_mutex_lock(&lock); // Lock queue
+    if (queue->rear == NULL)
+    {
         queue->front = queue->rear = newVehicle;
-    } else {
+    }
+    else
+    {
         queue->rear->next = newVehicle;
         queue->rear = newVehicle;
     }
     queue->count++;
-    pthread_mutex_unlock(&lock);  // Unlock queue
+    printf("✅ Vehicle %s added to queue. Total: %d\n", vehicleNum, queue->count);
+
+    pthread_mutex_unlock(&lock); // Unlock queue
 }
 
 // Function to dequeue a vehicle
-Vehicle* dequeue(Queue* queue) {
-    if (queue->front == NULL) {
+Vehicle *dequeue(Queue *queue)
+{
+    if (queue->front == NULL)
+    {
         return NULL;
     }
 
-    pthread_mutex_lock(&lock);  // Lock queue
-    Vehicle* temp = queue->front;
+    pthread_mutex_lock(&lock); // Lock queue
+    Vehicle *temp = queue->front;
     queue->front = queue->front->next;
-    if (queue->front == NULL) {
+    if (queue->front == NULL)
+    {
         queue->rear = NULL;
     }
     queue->count--;
-    pthread_mutex_unlock(&lock);  // Unlock queue
+    pthread_mutex_unlock(&lock); // Unlock queue
 
     return temp;
 }
 
 // Function to check and update priority lane
-void updatePriorityLane() {
-    if (queueA.count > 10) {
+void updatePriorityLane()
+{
+    if (queueA.count > 10)
+    {
         priorityLane = &queueA;
-    } else {
+    }
+    else
+    {
         priorityLane = NULL;
     }
 }
 
 // Thread function to read and process vehicles from file
-void* readAndProcessVehicles(void* arg) {
-    while (1) {
-        FILE* file = fopen(VEHICLE_FILE, "r");
-        if (!file) {
+void *readAndProcessVehicles(void *arg)
+{
+    while (1)
+    {
+        FILE *file = fopen(VEHICLE_FILE, "r");
+        if (!file)
+        {
             perror("Error opening vehicle file");
             sleep(1);
             continue;
         }
 
         char line[20];
-        while (fgets(line, sizeof(line), file)) {
-            line[strcspn(line, "\n")] = 0;  // Remove newline
-            char* vehicle = strtok(line, ":");
-            char* laneStr = strtok(NULL, ":");
+        while (fgets(line, sizeof(line), file))
+        {
+            line[strcspn(line, "\n")] = 0; // Remove newline
+            char *vehicle = strtok(line, ":");
+            char *laneStr = strtok(NULL, ":");
 
-            if (vehicle && laneStr) {
+            if (vehicle && laneStr)
+            {
                 char lane = laneStr[0];
 
-                if (lane == 'A') enqueue(&queueA, vehicle);
-                else if (lane == 'B') enqueue(&queueB, vehicle);
-                else if (lane == 'C') enqueue(&queueC, vehicle);
-                else if (lane == 'D') enqueue(&queueD, vehicle);
-                else printf("Invalid lane: %c\n", lane);
+                if (lane == 'A')
+                    enqueue(&queueA, vehicle);
+                else if (lane == 'B')
+                    enqueue(&queueB, vehicle);
+                else if (lane == 'C')
+                    enqueue(&queueC, vehicle);
+                else if (lane == 'D')
+                    enqueue(&queueD, vehicle);
+                else
+                    printf("Invalid lane: %c\n", lane);
 
-                printf("New Vehicle Added -> Number: %s, Lane: %c\n", vehicle, lane);  // ✅ FIXED
+                printf("New Vehicle Added -> Number: %s, Lane: %c\n", vehicle, lane); // ✅ FIXED
                 updatePriorityLane();
-            } else {
+            }
+            else
+            {
                 printf("Invalid Data Format: %s\n", line);
             }
         }
@@ -453,41 +497,69 @@ void* readAndProcessVehicles(void* arg) {
     }
 }
 
-
 // Thread function to process the queue
-void* checkQueue(void* arg) {
-    SharedData* sharedData = (SharedData*)arg;
-    while (1) {
-        Vehicle* vehicle = NULL;
+void *checkQueue(void *arg)
+{
+    SharedData *sharedData = (SharedData *)arg;
+    static int refreshCounter = 0;
+    while (1)
+    {
+        Vehicle *vehicle = NULL;
 
         // Serve priority lane first (if applicable)
-        if (priorityLane != NULL && priorityLane->count > 5) {
+        if (priorityLane != NULL && priorityLane->count > 5)
+        {
             vehicle = dequeue(priorityLane);
-            if (vehicle) {
+            if (vehicle)
+            {
                 printf("🚦 PRIORITY: Vehicle %s from Lane A served!\n", vehicle->vehicle_number);
                 free(vehicle);
             }
-        } else {
+        }
+        else
+        {
             // Serve normal lanes in round-robin fashion
-            if ((vehicle = dequeue(&queueA))) printf("Vehicle %s from Lane A served!\n", vehicle->vehicle_number);
-            else if ((vehicle = dequeue(&queueB))) printf("Vehicle %s from Lane B served!\n", vehicle->vehicle_number);
-            else if ((vehicle = dequeue(&queueC))) printf("Vehicle %s from Lane C served!\n", vehicle->vehicle_number);
-            else if ((vehicle = dequeue(&queueD))) printf("Vehicle %s from Lane D served!\n", vehicle->vehicle_number);
-            
-        if (vehicle) {free(vehicle);
-            refreshGraphics(); }
+            if ((vehicle = dequeue(&queueA)))
+                printf("Vehicle %s from Lane A served!\n", vehicle->vehicle_number);
+            else if ((vehicle = dequeue(&queueB)))
+                printf("Vehicle %s from Lane B served!\n", vehicle->vehicle_number);
+            else if ((vehicle = dequeue(&queueC)))
+                printf("Vehicle %s from Lane C served!\n", vehicle->vehicle_number);
+            else if ((vehicle = dequeue(&queueD)))
+                printf("Vehicle %s from Lane D served!\n", vehicle->vehicle_number);
+
+            if (vehicle)
+            {
+                free(vehicle);
+
+                refreshCounter++;
+                if (refreshCounter % 3 == 0)
+                { // ✅ Refresh every 3 vehicles processed
+                    refreshGraphics(sharedData);
+                }
+            }
         }
 
-        sleep(3);  // Simulate processing time
+        sleep(3); // Simulate processing time
     }
 }
 
-void refreshGraphics() {
+void refreshGraphics(SharedData *sharedData)
+{
+
+    SDL_LockMutex(mutex);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderClear(renderer);
     drawRoadsAndLane(renderer);
-    drawVehicles();  // ✅ Ensure vehicles are drawn
-    drawTrafficLight(renderer, false); 
-    SDL_RenderPresent(renderer);
-}
+    drawVehicles(); // ✅ Ensure vehicles are drawn
+    refreshLight(renderer, sharedData);
+    // drawTrafficLight(renderer, (sharedData->currentLight == 2));
 
+    drawTrafficLight(renderer, 375, 200, sharedData->currentLight == 0); // Lane A
+    drawTrafficLight(renderer, 375, 500, sharedData->currentLight == 1); // Lane B
+    drawTrafficLight(renderer, 275, 350, sharedData->currentLight == 2); // Lane C
+    drawTrafficLight(renderer, 475, 350, sharedData->currentLight == 3); // Lane D
+
+    SDL_RenderPresent(renderer);
+    SDL_UnlockMutex(mutex);
+}
