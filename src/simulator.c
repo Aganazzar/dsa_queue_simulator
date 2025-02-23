@@ -18,6 +18,8 @@
 #define MAX_QUEUE_SIZE 100
 #define MAX_VEHICLES 100
 #define VEHICLE_FILE "vehicles.data"
+#define VEHICLE_SIZE 20  // Add this near other #defines
+
 
 
 //const char *VEHICLE_FILE = "vehicles.data";
@@ -50,15 +52,22 @@ typedef struct
     int nextLight;
 } SharedData;
 
+// SDL2 Global Variables
+SDL_Window* window = NULL;
+SDL_Renderer* renderer = NULL;
+TTF_Font* font = NULL;
+
 // Function declarations
 bool initializeSDL(SDL_Window **window, SDL_Renderer **renderer);
-void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font);
+void drawRoadsAndLane(SDL_Renderer *renderer);
 void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int y);
-void drawLightForB(SDL_Renderer *renderer, bool isRed);
+void drawTrafficLight(SDL_Renderer *renderer, bool isRed);
 void refreshLight(SDL_Renderer *renderer, SharedData *sharedData);
-void *chequeQueue(void *arg);
+void *checkQueue(void *arg);
 // void* readAndParseFile(void* arg);
 void *readAndProcessVehicles(void *arg);
+void refreshGraphics();  // Add this before using refreshGraphics()
+void drawVehicles();  // Add this before using drawVehicles()
 
 void printMessageHelper(const char *message, int count)
 {
@@ -86,14 +95,15 @@ int main()
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderClear(renderer);
-    drawRoadsAndLane(renderer, font);
+    drawRoadsAndLane(renderer);
+    drawTrafficLight(renderer, false); 
     // drawLightForB(renderer, false);
     SDL_RenderPresent(renderer);
 
     // we need to create seprate long running thread for the queue processing and light
     // pthread_create(&tLight, NULL, refreshLight, &sharedData);
 
-    pthread_create(&tQueue, NULL, chequeQueue, &sharedData);
+    pthread_create(&tQueue, NULL, checkQueue, &sharedData);
     pthread_create(&fileReaderThread, NULL, readAndProcessVehicles, NULL);
     // pthread_create(&tReadFile, NULL, readAndParseFile, NULL);
     //  readAndParseFile();
@@ -107,6 +117,8 @@ int main()
         while (SDL_PollEvent(&event))
             if (event.type == SDL_QUIT)
                 running = false;
+
+                refreshGraphics(); 
     }
 
     // Continue the SDL2 UI loop (graphics rendering)
@@ -218,7 +230,8 @@ void drawArrwow(SDL_Renderer *renderer, int x1, int y1, int x2, int y2, int x3, 
     }
 }
 
-void drawLightForB(SDL_Renderer *renderer, bool isRed)
+void drawTrafficLight(SDL_Renderer *renderer, bool isRed)
+
 {
     // draw light box
     SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255);
@@ -234,7 +247,7 @@ void drawLightForB(SDL_Renderer *renderer, bool isRed)
     drawArrwow(renderer, 435, 305, 435, 305 + 20, 435 + 10, 305 + 10);
 }
 
-void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font)
+void drawRoadsAndLane(SDL_Renderer *renderer)
 {
     SDL_SetRenderDrawColor(renderer, 211, 211, 211, 255);
     // Vertical road
@@ -271,6 +284,48 @@ void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font)
     displayText(renderer, font, "C", 770, 400);
 }
 
+void drawVehicles() {
+    SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);  // Red color for vehicles
+
+    int posY = 50;  // Lane A position
+    Vehicle* temp = queueA.front;
+    while (temp && posY < 400) {
+        SDL_Rect vehicleRect = {WINDOW_WIDTH / 2 - 75, posY, VEHICLE_SIZE, VEHICLE_SIZE};
+        SDL_RenderFillRect(renderer, &vehicleRect);
+        posY += 30;
+        temp = temp->next;
+    }
+
+    posY = 750;  // Lane B position
+    temp = queueB.front;
+    while (temp && posY > 400) {
+        SDL_Rect vehicleRect = {WINDOW_WIDTH / 2 + 25, posY, VEHICLE_SIZE, VEHICLE_SIZE};
+        SDL_RenderFillRect(renderer, &vehicleRect);
+        posY -= 30;
+        temp = temp->next;
+    }
+
+    int posX = 750;  // Lane C position
+    temp = queueC.front;
+    while (temp && posX > 400) {
+        SDL_Rect vehicleRect = {posX, WINDOW_HEIGHT / 2 - 75, VEHICLE_SIZE, VEHICLE_SIZE};
+        SDL_RenderFillRect(renderer, &vehicleRect);
+        posX -= 30;
+        temp = temp->next;
+    }
+
+    posX = 50;  // Lane D position
+    temp = queueD.front;
+    while (temp && posX < 400) {
+        SDL_Rect vehicleRect = {posX, WINDOW_HEIGHT / 2 + 25, VEHICLE_SIZE, VEHICLE_SIZE};
+        SDL_RenderFillRect(renderer, &vehicleRect);
+        posX += 30;
+        temp = temp->next;
+    }
+    SDL_RenderPresent(renderer);
+}
+
+
 void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int y)
 {
     // display necessary text
@@ -280,32 +335,33 @@ void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int 
     SDL_FreeSurface(textSurface);
     SDL_Rect textRect = {x, y, 0, 0};
     SDL_QueryTexture(texture, NULL, NULL, &textRect.w, &textRect.h);
-    SDL_Log("DIM of SDL_Rect %d %d %d %d", textRect.x, textRect.y, textRect.h, textRect.w);
+    //SDL_Log("DIM of SDL_Rect %d %d %d %d", textRect.x, textRect.y, textRect.h, textRect.w);
     // SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     // SDL_Log("TTF_Error: %s\n", TTF_GetError());
     SDL_RenderCopy(renderer, texture, NULL, &textRect);
     // SDL_Log("TTF_Error: %s\n", TTF_GetError());
 }
-
 void refreshLight(SDL_Renderer *renderer, SharedData *sharedData)
 {
     if (sharedData->nextLight == sharedData->currentLight)
         return; // early return
 
     if (sharedData->nextLight == 0)
-    { // trun off all lights
-        drawLightForB(renderer, false);
+    { // turn off all lights
+        drawTrafficLight(renderer, false);  // ✅ FIXED FUNCTION NAME
     }
     if (sharedData->nextLight == 2)
-        drawLightForB(renderer, true);
+        drawTrafficLight(renderer, true);  // ✅ FIXED FUNCTION NAME
     else
-        drawLightForB(renderer, false);
+        drawTrafficLight(renderer, false);  // ✅ FIXED FUNCTION NAME
+
     SDL_RenderPresent(renderer);
     printf("Light of queue updated from %d to %d\n", sharedData->currentLight, sharedData->nextLight);
-    // update the light
+    
     sharedData->currentLight = sharedData->nextLight;
     fflush(stdout);
 }
+
 
 // Function to initialize a queue
 void initQueue(Queue* queue) {
@@ -399,7 +455,7 @@ void* readAndProcessVehicles(void* arg) {
 
 
 // Thread function to process the queue
-void* chequeQueue(void* arg) {
+void* checkQueue(void* arg) {
     SharedData* sharedData = (SharedData*)arg;
     while (1) {
         Vehicle* vehicle = NULL;
@@ -418,9 +474,20 @@ void* chequeQueue(void* arg) {
             else if ((vehicle = dequeue(&queueC))) printf("Vehicle %s from Lane C served!\n", vehicle->vehicle_number);
             else if ((vehicle = dequeue(&queueD))) printf("Vehicle %s from Lane D served!\n", vehicle->vehicle_number);
             
-            if (vehicle) free(vehicle);
+        if (vehicle) {free(vehicle);
+            refreshGraphics(); }
         }
 
         sleep(3);  // Simulate processing time
     }
 }
+
+void refreshGraphics() {
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    SDL_RenderClear(renderer);
+    drawRoadsAndLane(renderer);
+    drawVehicles();  // ✅ Ensure vehicles are drawn
+    drawTrafficLight(renderer, false); 
+    SDL_RenderPresent(renderer);
+}
+
