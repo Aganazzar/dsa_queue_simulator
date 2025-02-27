@@ -183,26 +183,88 @@ void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font) {
     SDL_RenderFillRect(renderer, &horizontalRoad);
     // draw horizontal lanes
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    for(int i=0; i<=3; i++){
+  
+        //Road Outlines
+        //i=0
         // Horizontal lanes
         SDL_RenderDrawLine(renderer, 
-            0, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*i,  // x1,y1
-            WINDOW_WIDTH/2 - ROAD_WIDTH/2, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*i // x2, y2
+            0, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*0,  // x1,y1
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*0 // x2, y2
         );
         SDL_RenderDrawLine(renderer, 
-            800, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*i,
-            WINDOW_WIDTH/2 + ROAD_WIDTH/2, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*i
+            800, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*0,
+            WINDOW_WIDTH/2 + ROAD_WIDTH/2, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*0
         );
         // Vertical lanes
         SDL_RenderDrawLine(renderer,
-            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*i, 0,
-            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*i, WINDOW_HEIGHT/2 - ROAD_WIDTH/2
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*0, 0,
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*0, WINDOW_HEIGHT/2 - ROAD_WIDTH/2
         );
         SDL_RenderDrawLine(renderer,
-            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*i, 800,
-            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*i, WINDOW_HEIGHT/2 + ROAD_WIDTH/2
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*0, 800,
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*0, WINDOW_HEIGHT/2 + ROAD_WIDTH/2
         );
-    }
+        //i=3
+        //Horizontal Lines
+        SDL_RenderDrawLine(renderer, 
+            0, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*3,  // x1,y1
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*3 // x2, y2
+        );
+        SDL_RenderDrawLine(renderer, 
+            800, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*3,
+            WINDOW_WIDTH/2 + ROAD_WIDTH/2, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*3
+        );
+        // Vertical lanes
+        SDL_RenderDrawLine(renderer,
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*3, 0,
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*3, WINDOW_HEIGHT/2 - ROAD_WIDTH/2
+        );
+        SDL_RenderDrawLine(renderer,
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*3, 800,
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2 + LANE_WIDTH*3, WINDOW_HEIGHT/2 + ROAD_WIDTH/2
+        );
+        //Central part lanes
+        //Horizontal Lines
+        SDL_RenderDrawLine(renderer, 
+            0, WINDOW_HEIGHT/2 - ROAD_WIDTH/4,  // x1,y1
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2, WINDOW_HEIGHT/2 - ROAD_WIDTH/4 // x2, y2
+        );
+        SDL_RenderDrawLine(renderer, 
+            800, WINDOW_HEIGHT/2 + ROAD_WIDTH/4,
+            WINDOW_WIDTH/2 + ROAD_WIDTH/2, WINDOW_HEIGHT/2 + ROAD_WIDTH/4
+        );
+        // Vertical lanes
+        SDL_RenderDrawLine(renderer,
+            WINDOW_WIDTH/2 + ROAD_WIDTH/4, 0,
+            WINDOW_WIDTH/2 + ROAD_WIDTH/4, WINDOW_HEIGHT/2 - ROAD_WIDTH/2
+        );
+        SDL_RenderDrawLine(renderer,
+            WINDOW_WIDTH/2 - ROAD_WIDTH/4, 800,
+            WINDOW_WIDTH/2 - ROAD_WIDTH/4, WINDOW_HEIGHT/2 + ROAD_WIDTH/2
+        );
+
+        //Pass lanes
+        //Horizontal lanes
+        SDL_RenderDrawLine(renderer, 
+            0, WINDOW_HEIGHT/2,
+            WINDOW_WIDTH/2 - ROAD_WIDTH/2,  WINDOW_HEIGHT/2
+        );
+        SDL_RenderDrawLine(renderer, 
+            800, WINDOW_HEIGHT/2,
+            WINDOW_WIDTH/2 + ROAD_WIDTH/2, WINDOW_HEIGHT/2 
+         );
+         //Vertical Lanes
+        SDL_RenderDrawLine(renderer,
+            WINDOW_WIDTH/2 , 0,
+            WINDOW_WIDTH/2 , WINDOW_HEIGHT/2 - ROAD_WIDTH/2
+        );
+        SDL_RenderDrawLine(renderer,
+            WINDOW_WIDTH/2 , 800,
+            WINDOW_WIDTH/2 , WINDOW_HEIGHT/2 + ROAD_WIDTH/2
+        );
+        //
+
+    
     displayText(renderer, font, "A",400, 10);
     displayText(renderer, font, "B",400,770);
     displayText(renderer, font, "D",10,400);
