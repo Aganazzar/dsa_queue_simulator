@@ -15,6 +15,9 @@
 #define LANE_WIDTH 50
 #define ARROW_SIZE 15
 
+#define VEHICLE_HEIGHT 10
+#define VEHICLE_WIDTH 17
+
 
 const char* VEHICLE_FILE = "vehicles.data";
 
@@ -32,7 +35,31 @@ void drawLightForB(SDL_Renderer* renderer, bool isRed);
 void refreshLight(SDL_Renderer *renderer, SharedData* sharedData);
 void* chequeQueue(void* arg);
 void* readAndParseFile(void* arg);
+void drawVehicles( SDL_Renderer *renderer);
 
+void drawVehicles( SDL_Renderer *renderer){
+    SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
+     //central lanes
+     SDL_Rect vehicleD = {0 , WINDOW_HEIGHT/2 -VEHICLE_HEIGHT - 5 , VEHICLE_WIDTH, VEHICLE_HEIGHT};//x,y,w,h
+     SDL_Rect vehicleA = {WINDOW_WIDTH/2+5, 0, VEHICLE_HEIGHT, VEHICLE_WIDTH};
+     SDL_Rect vehicleC = {WINDOW_WIDTH-VEHICLE_WIDTH, WINDOW_HEIGHT/2  + 5 , VEHICLE_WIDTH, VEHICLE_HEIGHT};
+     SDL_Rect vehicleB = {WINDOW_WIDTH/2- VEHICLE_HEIGHT -5, WINDOW_HEIGHT-VEHICLE_WIDTH, VEHICLE_HEIGHT, VEHICLE_WIDTH};
+ 
+     //free lanes
+     SDL_Rect fvehicleD = {0 , WINDOW_HEIGHT/2 - ROAD_WIDTH/4- VEHICLE_HEIGHT - 5 ,VEHICLE_WIDTH, VEHICLE_HEIGHT};//x,y,w,h
+     SDL_Rect fvehicleA = {WINDOW_WIDTH/2+ROAD_WIDTH/4+5, 0,VEHICLE_HEIGHT, VEHICLE_WIDTH};
+     SDL_Rect fvehicleC = {WINDOW_WIDTH-VEHICLE_WIDTH, WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5, VEHICLE_WIDTH, VEHICLE_HEIGHT};
+     SDL_Rect fvehicleB = {WINDOW_WIDTH/2 - ROAD_WIDTH/4 -VEHICLE_HEIGHT -5, WINDOW_HEIGHT-VEHICLE_WIDTH, VEHICLE_HEIGHT, VEHICLE_WIDTH};
+ 
+    SDL_RenderFillRect(renderer, &vehicleD);
+    SDL_RenderFillRect(renderer, &vehicleC);
+    SDL_RenderFillRect(renderer, &vehicleB);
+    SDL_RenderFillRect(renderer, &vehicleA);
+    SDL_RenderFillRect(renderer, &fvehicleD);
+    SDL_RenderFillRect(renderer, &fvehicleA);
+    SDL_RenderFillRect(renderer, &fvehicleC);
+    SDL_RenderFillRect(renderer, &fvehicleB);
+}
 
 void printMessageHelper(const char* message, int count) {
     for (int i = 0; i < count; i++) printf("%s\n", message);
@@ -56,6 +83,7 @@ int main() {
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     SDL_RenderClear(renderer);
     drawRoadsAndLane(renderer, font);
+    drawVehicles(renderer);
     // drawLightForB(renderer, false);
     SDL_RenderPresent(renderer);
 
