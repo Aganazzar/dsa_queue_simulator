@@ -150,10 +150,36 @@ void updateFreeLaneVehiclePositions() {
 
         while (current) {
             switch (current->lane) {
-                case 'D': current->x += current->speed; break; // Right-moving
-                case 'A': current->y += current->speed; break; // Down-moving
-                case 'C': current->x -= current->speed; break; // Left-moving
-                case 'B': current->y -= current->speed; break; // Up-moving
+                
+                case 'D': 
+                
+                if (current->x > WINDOW_WIDTH/2-ROAD_WIDTH/2+5){
+                    current->y -= current->speed; }
+                else{
+                    current->x += current->speed; 
+                }
+                break; // Right-moving
+                case 'A': 
+                if (current->y > WINDOW_HEIGHT/2-ROAD_WIDTH/2+5){
+                    current->x += current->speed;  }
+                else{
+                    current->y += current->speed; 
+                }
+                break; // Down-moving
+                case 'C': 
+                if (current->x < WINDOW_WIDTH/2+ROAD_WIDTH/2-VEHICLE_WIDTH-5){
+                    current->y += current->speed;} 
+                else{
+                    current->x -= current->speed;
+                }    
+                break; // Left-moving
+                case 'B': 
+                if (current->y < WINDOW_HEIGHT/2+ROAD_WIDTH/2-VEHICLE_HEIGHT-5){
+                    current->x -= current->speed;} 
+                else{
+                    current->y -= current->speed;
+                }    
+                break; // Up-moving
             }
             current = current->next;
         }
@@ -167,8 +193,22 @@ void drawFreeLaneVehicles(SDL_Renderer* renderer) {
 
     for (int i = 0; i < 4; i++) {
         FreeLaneVehicle* current = laneQueues[i].front;
+        SDL_Rect vehicleRect;
         while (current) {
-            SDL_Rect vehicleRect = {current->x, current->y, VEHICLE_WIDTH, VEHICLE_HEIGHT};
+            if(current->lane == 'D' || current->lane == 'C'){
+                vehicleRect.x= current->x;
+                vehicleRect.y= current->y;
+                vehicleRect.w= VEHICLE_WIDTH;
+                vehicleRect.h= VEHICLE_HEIGHT;
+            }
+            if(current->lane == 'A' || current->lane == 'B'){
+                vehicleRect.x= current->x;
+                vehicleRect.y= current->y;
+                vehicleRect.w= VEHICLE_HEIGHT;
+                vehicleRect.h= VEHICLE_WIDTH;
+            }
+            
+            
             SDL_RenderFillRect(renderer, &vehicleRect);
             current = current->next;
         }
