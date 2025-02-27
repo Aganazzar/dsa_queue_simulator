@@ -6,6 +6,7 @@
 #include <stdio.h> 
 #include <string.h>
 
+
 #define MAX_LINE_LENGTH 20
 #define MAIN_FONT "/usr/share/fonts/TTF/DejaVuSans.ttf"
 #define WINDOW_WIDTH 800
@@ -17,9 +18,11 @@
 
 #define VEHICLE_HEIGHT 10
 #define VEHICLE_WIDTH 17
+#define LIGHT_WIDTH 25
+#define LIGHT_HEIGHT 25
 
 
-const char* VEHICLE_FILE = "vehicles.data";
+#define VEHICLE_FILE "vehicles.data"
 
 typedef struct{
     int currentLight;
@@ -36,6 +39,87 @@ void refreshLight(SDL_Renderer *renderer, SharedData* sharedData);
 void* chequeQueue(void* arg);
 void* readAndParseFile(void* arg);
 void drawVehicles( SDL_Renderer *renderer);
+void drawTrafficLights(SDL_Renderer *renderer);
+void freeLaneControl(SDL_Renderer *renderer);
+void updateVehicles(void* arg);
+
+bool running = true;
+
+void updateVehicles(void* arg){
+    SDL_Renderer* renderer = (SDL_Renderer*)arg;
+    while(running){
+        SDL_RenderClear(renderer);
+        drawRoadsAndLane(renderer, NULL);
+        drawTrafficLights(renderer);
+        freeLaneControl(renderer);
+        SDL_RenderPresent(renderer);
+        sleep(1); // Update every second
+    }
+}
+
+
+void freeLaneControl(SDL_Renderer *renderer){
+   
+    SDL_SetRenderDrawColor(renderer, 10, 200, 0, 255);
+  //free lanes
+    FILE *file= fopen(VEHICLE_FILE, "r");
+    if (file == NULL) {
+        perror("fopen failed");
+        return;
+    }
+    char line[MAX_LINE_LENGTH];
+    while (fgets(line, sizeof(line), file)) {
+        char vehicleID[10];
+        char lane;
+        if (sscanf(line, "%9[^:]:%c", vehicleID, &lane) != 2) continue;
+
+        SDL_Rect vehicleRect;
+        switch (lane) {
+            case 'D': 
+                vehicleRect.x = 0;
+                vehicleRect.y = WINDOW_HEIGHT/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5;
+                vehicleRect.w = VEHICLE_WIDTH;
+                vehicleRect.h = VEHICLE_HEIGHT;
+                break;
+            case 'A': 
+                vehicleRect.x = WINDOW_WIDTH/2 + ROAD_WIDTH/4 + 5;
+                vehicleRect.y = 0;
+                vehicleRect.w = VEHICLE_HEIGHT;
+                vehicleRect.h = VEHICLE_WIDTH;
+                break;
+            case 'C': 
+                vehicleRect.x = WINDOW_WIDTH - VEHICLE_WIDTH;
+                vehicleRect.y = WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5;
+                vehicleRect.w = VEHICLE_WIDTH;
+                vehicleRect.h = VEHICLE_HEIGHT;
+                break;
+            case 'B': 
+                vehicleRect.x = WINDOW_WIDTH/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5;
+                vehicleRect.y = WINDOW_HEIGHT - VEHICLE_WIDTH;
+                vehicleRect.w = VEHICLE_HEIGHT;
+                vehicleRect.h = VEHICLE_WIDTH;
+                break;
+            default:
+                continue; // Ignore invalid data
+        }
+        SDL_RenderFillRect(renderer, &vehicleRect);
+    }
+    fclose(file);
+}
+
+void drawTrafficLights(SDL_Renderer *renderer){
+    // draw light box
+    SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255);
+    SDL_Rect lightBoxD = {WINDOW_WIDTH/2+ROAD_WIDTH/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2, LIGHT_WIDTH, LIGHT_HEIGHT};
+    SDL_Rect lightBoxA = {WINDOW_WIDTH/2+ROAD_WIDTH/2-LIGHT_WIDTH, WINDOW_HEIGHT/2+ROAD_WIDTH/2, LIGHT_WIDTH, LIGHT_HEIGHT};
+    SDL_Rect lightBoxC = {WINDOW_WIDTH/2-ROAD_WIDTH/2-LIGHT_WIDTH, WINDOW_HEIGHT/2+ROAD_WIDTH/2-LIGHT_HEIGHT, LIGHT_WIDTH, LIGHT_HEIGHT};
+    SDL_Rect lightBoxB = {WINDOW_WIDTH/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2-LIGHT_HEIGHT, LIGHT_WIDTH, LIGHT_HEIGHT};
+    SDL_RenderFillRect(renderer, &lightBoxD);
+    SDL_RenderFillRect(renderer, &lightBoxA);
+    SDL_RenderFillRect(renderer, &lightBoxC);
+    SDL_RenderFillRect(renderer, &lightBoxB);
+    
+}
 
 void drawVehicles( SDL_Renderer *renderer){
     SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
@@ -45,20 +129,12 @@ void drawVehicles( SDL_Renderer *renderer){
      SDL_Rect vehicleC = {WINDOW_WIDTH-VEHICLE_WIDTH, WINDOW_HEIGHT/2  + 5 , VEHICLE_WIDTH, VEHICLE_HEIGHT};
      SDL_Rect vehicleB = {WINDOW_WIDTH/2- VEHICLE_HEIGHT -5, WINDOW_HEIGHT-VEHICLE_WIDTH, VEHICLE_HEIGHT, VEHICLE_WIDTH};
  
-     //free lanes
-     SDL_Rect fvehicleD = {0 , WINDOW_HEIGHT/2 - ROAD_WIDTH/4- VEHICLE_HEIGHT - 5 ,VEHICLE_WIDTH, VEHICLE_HEIGHT};//x,y,w,h
-     SDL_Rect fvehicleA = {WINDOW_WIDTH/2+ROAD_WIDTH/4+5, 0,VEHICLE_HEIGHT, VEHICLE_WIDTH};
-     SDL_Rect fvehicleC = {WINDOW_WIDTH-VEHICLE_WIDTH, WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5, VEHICLE_WIDTH, VEHICLE_HEIGHT};
-     SDL_Rect fvehicleB = {WINDOW_WIDTH/2 - ROAD_WIDTH/4 -VEHICLE_HEIGHT -5, WINDOW_HEIGHT-VEHICLE_WIDTH, VEHICLE_HEIGHT, VEHICLE_WIDTH};
- 
+   
     SDL_RenderFillRect(renderer, &vehicleD);
     SDL_RenderFillRect(renderer, &vehicleC);
     SDL_RenderFillRect(renderer, &vehicleB);
     SDL_RenderFillRect(renderer, &vehicleA);
-    SDL_RenderFillRect(renderer, &fvehicleD);
-    SDL_RenderFillRect(renderer, &fvehicleA);
-    SDL_RenderFillRect(renderer, &fvehicleC);
-    SDL_RenderFillRect(renderer, &fvehicleB);
+    
 }
 
 void printMessageHelper(const char* message, int count) {
@@ -74,34 +150,33 @@ int main() {
     if (!initializeSDL(&window, &renderer)) {
         return -1;
     }
-    SDL_mutex* mutex = SDL_CreateMutex();
-    SharedData sharedData = { 0, 0 }; // 0 => all red
+    //SDL_mutex* mutex = SDL_CreateMutex();
+    //SharedData sharedData = { 0, 0 }; // 0 => all red
     
     TTF_Font* font = TTF_OpenFont(MAIN_FONT, 24);
     if (!font) SDL_Log("Failed to load font: %s", TTF_GetError());
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    SDL_RenderClear(renderer);
-    drawRoadsAndLane(renderer, font);
-    drawVehicles(renderer);
-    // drawLightForB(renderer, false);
-    SDL_RenderPresent(renderer);
+    
+    pthread_t vehicleThread;
+    pthread_create(&vehicleThread, NULL, updateVehicles, renderer);
 
     // we need to create seprate long running thread for the queue processing and light
     // pthread_create(&tLight, NULL, refreshLight, &sharedData);
-    pthread_create(&tQueue, NULL, chequeQueue, &sharedData);
-    pthread_create(&tReadFile, NULL, readAndParseFile, NULL);
+    //pthread_create(&tQueue, NULL, chequeQueue, &sharedData);
+    //pthread_create(&tReadFile, NULL, readAndParseFile, NULL);
     // readAndParseFile();
 
     // Continue the UI thread
     bool running = true;
     while (running) {
         // update light
-        refreshLight(renderer, &sharedData);
+       // refreshLight(renderer, &sharedData);
         while (SDL_PollEvent(&event))
-            if (event.type == SDL_QUIT) running = false;
+           { if (event.type == SDL_QUIT) {running = false;}}
+
     }
-    SDL_DestroyMutex(mutex);
+    //SDL_DestroyMutex(mutex);
     if (renderer) SDL_DestroyRenderer(renderer);
     if (window) SDL_DestroyWindow(window);
     // pthread_kil
@@ -343,13 +418,13 @@ void* chequeQueue(void* arg){
         sleep(5);
     }
 }
-
+/*
 // you may need to pass the queue on this function for sharing the data
 void* readAndParseFile(void* arg) {
     while(1){ 
         FILE* file = fopen(VEHICLE_FILE, "r");
         if (!file) {
-            perror("Error opening file");
+            perror("Error opening ");
             continue;
         }
 
@@ -368,4 +443,4 @@ void* readAndParseFile(void* arg) {
         fclose(file);
         sleep(2); // manage this time
     }
-}
+}*/

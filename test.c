@@ -13,3 +13,19 @@ SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
 
     SDL_RenderFillRect(renderer, &vehicleD);
     SDL_RenderFillRect(renderer, &vehicleC);
+
+    gcc traffic_generator.c -o traffic_generator && ./traffic_generator
+gcc receiver.c -o receiver && ./receiver
+
+
+
+gcc src/simulator.c -o simulator -Wall -Wextra -I./include -I/opt/homebrew/include $(shell sdl2-config --libs) -lSDL2 -lSDL2_ttf -lpthread && ./simulator
+gcc simulator.c -o simulator -Wall -Wextra -I./include -I/opt/homebrew/include $(sdl2-config --cflags --libs) -lSDL2 -lSDL2_ttf -lpthread && ./simulator
+
+
+# Compiler settings
+CC = gcc
+CFLAGS = -Wall -Wextra -I./include -I/opt/homebrew/include
+LDFLAGS = $(shell sdl2-config --libs) -lSDL2 -lSDL2_ttf -lpthread
+
+gcc src/simulator.c -o simulator -Wall -Wextra -I./include -I/opt/homebrew/include $(sdl2-config --cflags --libs) -lSDL2 -lSDL2_ttf -lpthread && ./simulator
