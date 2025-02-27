@@ -6,7 +6,8 @@
 
 #define PORT 5000
 #define BUFFER_SIZE 100
-#define VEHICLE_FILE "vehicles.data"
+//#define VEHICLE_FILE "vehicles.data"
+#define SIMULATOR_PORT 7000  
 
 int main() {
     int server_fd, new_socket;
@@ -19,6 +20,8 @@ int main() {
         perror("Socket failed");
         exit(EXIT_FAILURE);
     }
+
+    
 
     // Bind address
     address.sin_family = AF_INET;
@@ -55,18 +58,30 @@ int main() {
                 break;
             }
 
+          
+            buffer[bytes_read] = '\0'; // Null-terminate received data
             printf("Received: %s\n", buffer);
 
-            // Save received vehicle data
-            FILE *file = fopen(VEHICLE_FILE, "a");
-            if (file) {
-                fprintf(file, "%s\n", buffer);
-                fclose(file);
-            } else {
-                perror("Error opening file");
+            // Forward vehicle data to simulator
+            int simulator_socket = socket(AF_INET, SOCK_STREAM, 0);
+            if (simulator_socket < 0) {
+                perror("Simulator socket failed");
+                continue;
             }
 
-            memset(buffer, 0, BUFFER_SIZE);
+            struct sockaddr_in simulator_addr;
+            simulator_addr.sin_family = AF_INET;
+            simulator_addr.sin_port = htons(SIMULATOR_PORT);
+            simulator_addr.sin_addr.s_addr = INADDR_ANY;
+
+            if (connect(simulator_socket, (struct sockaddr*)&simulator_addr, sizeof(simulator_addr)) == 0) {
+                send(simulator_socket, buffer, strlen(buffer), 0);
+                printf("Forwarded data to simulator: %s\n", buffer);
+            } else {
+                perror("Failed to connect to simulator");
+            }
+
+            close(simulator_socket);  // Close after each message
         }
     }
 

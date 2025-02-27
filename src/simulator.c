@@ -1,11 +1,20 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h> 
 #include <stdio.h> 
 #include <string.h>
+#include <arpa/inet.h>
+#include <signal.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
+
+#define SIMULATOR_PORT 7000
+#define BUFFER_SIZE 100
+//#define VEHICLE_FILE "vehicles.data"
 
 #define MAX_LINE_LENGTH 20
 #define MAIN_FONT "/usr/share/fonts/TTF/DejaVuSans.ttf"
@@ -20,9 +29,23 @@
 #define VEHICLE_WIDTH 17
 #define LIGHT_WIDTH 25
 #define LIGHT_HEIGHT 25
+#define FREE_VEHICLE_SPEED 5
+
+typedef struct FreeLaneVehicle {
+    int x, y;
+    int speed;
+    char lane;
+    struct FreeLaneVehicle* next;
+} FreeLaneVehicle;
+
+typedef struct{
+FreeLaneVehicle* front;
+FreeLaneVehicle* rear;
+} FreeLaneQueue;
 
 
-#define VEHICLE_FILE "vehicles.data"
+FreeLaneQueue laneQueues[4] = {{NULL, NULL}, {NULL, NULL}, {NULL, NULL}, {NULL, NULL}};
+
 
 typedef struct{
     int currentLight;
@@ -40,11 +63,18 @@ void* chequeQueue(void* arg);
 void* readAndParseFile(void* arg);
 void drawVehicles( SDL_Renderer *renderer);
 void drawTrafficLights(SDL_Renderer *renderer);
-void freeLaneControl(SDL_Renderer *renderer);
+//void freeLaneControl(SDL_Renderer *renderer);
 void updateVehicles(void* arg);
+void drawFreeLaneVehicles(SDL_Renderer* renderer);
+void enqueueFreeLaneVehicle(int x, int y, int speed, char lane);
+void dequeueFreeLaneVehicle();
+void updateFreeLaneVehiclePositions();
+void *freeLaneControl(void *arg);
+
 
 bool running = true;
 
+/*
 void updateVehicles(void* arg){
     SDL_Renderer* renderer = (SDL_Renderer*)arg;
     while(running){
@@ -55,57 +85,233 @@ void updateVehicles(void* arg){
         SDL_RenderPresent(renderer);
         sleep(1); // Update every second
     }
+}*/
+
+
+
+// ** Enqueue vehicle into the correct lane queue **
+void enqueueFreeLaneVehicle(int x, int y, int speed, char lane) {
+    FreeLaneVehicle* newVehicle = (FreeLaneVehicle*)malloc(sizeof(FreeLaneVehicle));
+    newVehicle->x = x;
+    newVehicle->y = y;
+    newVehicle->speed = speed;
+    newVehicle->lane = lane;
+    newVehicle->next = NULL;
+
+    int laneIndex = lane - 'A'; // Convert A, B, C, D to 0, 1, 2, 3
+   
+    if (laneIndex < 0 || laneIndex > 3) return;  // Ignore invalid lane
+
+    if (laneQueues[laneIndex].front == NULL) {
+        laneQueues[laneIndex].front = laneQueues[laneIndex].rear = newVehicle;
+    } else {
+        laneQueues[laneIndex].rear->next = newVehicle;
+        laneQueues[laneIndex].rear = newVehicle;
+    }
+}
+
+// ** Remove vehicles that have moved out of screen bounds **
+void dequeueFreeLaneVehicles() {
+    for (int i = 0; i < 4; i++) {
+        FreeLaneVehicle* current = laneQueues[i].front;
+        FreeLaneVehicle* prev = NULL;
+
+        while (current) {
+            if (current->x > WINDOW_WIDTH || current->y > WINDOW_HEIGHT ||
+                current->x < 0 || current->y < 0) {
+
+                FreeLaneVehicle* toDelete = current;
+                current = current->next;
+
+                if (prev == NULL) { // If deleting head
+                    laneQueues[i].front = current;
+                } else {
+                    prev->next = current;
+                }
+
+                free(toDelete);
+            } else {
+                prev = current;
+                current = current->next;
+            }
+        }
+
+        if (laneQueues[i].front == NULL) {
+            laneQueues[i].rear = NULL;
+        }
+    }
 }
 
 
+// ** Move vehicles forward **
+void updateFreeLaneVehiclePositions() {
+    for (int i = 0; i < 4; i++) {
+        FreeLaneVehicle* current = laneQueues[i].front;
+
+        while (current) {
+            switch (current->lane) {
+                case 'D': current->x += current->speed; break; // Right-moving
+                case 'A': current->y += current->speed; break; // Down-moving
+                case 'C': current->x -= current->speed; break; // Left-moving
+                case 'B': current->y -= current->speed; break; // Up-moving
+            }
+            current = current->next;
+        }
+        dequeueFreeLaneVehicles();
+    }
+}
+
+
+void drawFreeLaneVehicles(SDL_Renderer* renderer) {
+    SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
+
+    for (int i = 0; i < 4; i++) {
+        FreeLaneVehicle* current = laneQueues[i].front;
+        while (current) {
+            SDL_Rect vehicleRect = {current->x, current->y, VEHICLE_WIDTH, VEHICLE_HEIGHT};
+            SDL_RenderFillRect(renderer, &vehicleRect);
+            current = current->next;
+        }
+    }
+}
+
+// ** Thread Function to Update Vehicles **
+void updateVehicles(void* arg){
+    SDL_Renderer* renderer = (SDL_Renderer*)arg;
+    while(running){
+        SDL_RenderClear(renderer);
+        drawRoadsAndLane(renderer, NULL);
+        drawTrafficLights(renderer);
+        //freeLaneControl();
+        updateFreeLaneVehiclePositions();
+        drawFreeLaneVehicles(renderer);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(50); // Slows down the update rate for smoother movement
+    }
+}
+
+
+
+void *freeLaneControl(void *arg) {
+    int server_fd, client_socket;
+    struct sockaddr_in server_addr, client_addr;
+    int addrlen = sizeof(client_addr);
+    char buffer[BUFFER_SIZE];
+
+    // Create socket
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket failed");
+        exit(EXIT_FAILURE);
+    }
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    
+
+    // Register signal handlers
+    //signal(SIGINT, handle_exit);  // Handle Ctrl+C
+    //signal(SIGTERM, handle_exit); // Handle kill command
+    // Bind socket
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    server_addr.sin_port = htons(SIMULATOR_PORT);
+
+    if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        perror("Bind failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    // Start listening
+    if (listen(server_fd, 3) < 0) {
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("Simulator listening on port %d...\n", SIMULATOR_PORT);
+
+    while (1) {
+        client_socket = accept(server_fd, (struct sockaddr*)&client_addr, (socklen_t*)&addrlen);
+        if (client_socket < 0) {
+            perror("Accept failed");
+            continue;
+        }
+
+        while (1) {
+            int bytes_read = read(client_socket, buffer, BUFFER_SIZE);
+            if (bytes_read <= 0) {
+                printf("Client disconnected.\n");
+                close(client_socket);
+                break;
+            }
+
+            buffer[bytes_read] = '\0';
+            printf("Simulator received: %s\n", buffer);
+
+            // Parse vehicle data
+            char vehicleID[10];
+            char lane;
+            if (sscanf(buffer, "%9[^:]:%c", vehicleID, &lane) != 2) continue;
+
+            int x = 0, y = 0;
+            switch (lane) {
+                case 'D': x = 0; y = WINDOW_HEIGHT/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; break;
+                case 'A': x = WINDOW_WIDTH/2 + ROAD_WIDTH/4 + 5; y = 0; break;
+                case 'C': x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5; break;
+                case 'B': x = WINDOW_WIDTH/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; y = WINDOW_HEIGHT - VEHICLE_WIDTH; break;
+                default: continue;
+            }
+
+            printf("Enqueuing vehicle %s at x=%d, y=%d, lane=%c\n", vehicleID, x, y, lane);
+            enqueueFreeLaneVehicle(x, y, FREE_VEHICLE_SPEED, lane);
+        }
+    }
+    shutdown(server_fd, SHUT_RDWR); 
+    close(server_fd);
+}
+
+/*
+// ** Process and enqueue vehicles from file **
 void freeLaneControl(SDL_Renderer *renderer){
-   
-    SDL_SetRenderDrawColor(renderer, 10, 200, 0, 255);
-  //free lanes
+    
+        printf("freeLaneControl() function called!\n");
+        fflush(stdout);  // Force print immediately
     FILE *file= fopen(VEHICLE_FILE, "r");
     if (file == NULL) {
         perror("fopen failed");
         return;
     }
-    char line[MAX_LINE_LENGTH];
+
+    char line[256];
     while (fgets(line, sizeof(line), file)) {
         char vehicleID[10];
         char lane;
         if (sscanf(line, "%9[^:]:%c", vehicleID, &lane) != 2) continue;
 
-        SDL_Rect vehicleRect;
+        int x = 0, y = 0;
         switch (lane) {
-            case 'D': 
-                vehicleRect.x = 0;
-                vehicleRect.y = WINDOW_HEIGHT/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5;
-                vehicleRect.w = VEHICLE_WIDTH;
-                vehicleRect.h = VEHICLE_HEIGHT;
-                break;
-            case 'A': 
-                vehicleRect.x = WINDOW_WIDTH/2 + ROAD_WIDTH/4 + 5;
-                vehicleRect.y = 0;
-                vehicleRect.w = VEHICLE_HEIGHT;
-                vehicleRect.h = VEHICLE_WIDTH;
-                break;
-            case 'C': 
-                vehicleRect.x = WINDOW_WIDTH - VEHICLE_WIDTH;
-                vehicleRect.y = WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5;
-                vehicleRect.w = VEHICLE_WIDTH;
-                vehicleRect.h = VEHICLE_HEIGHT;
-                break;
-            case 'B': 
-                vehicleRect.x = WINDOW_WIDTH/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5;
-                vehicleRect.y = WINDOW_HEIGHT - VEHICLE_WIDTH;
-                vehicleRect.w = VEHICLE_HEIGHT;
-                vehicleRect.h = VEHICLE_WIDTH;
-                break;
-            default:
-                continue; // Ignore invalid data
+            case 'D': x = 0; y = WINDOW_HEIGHT/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; break;
+            case 'A': x = WINDOW_WIDTH/2 + ROAD_WIDTH/4 + 5; y = 0; break;
+            case 'C': x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5; break;
+            case 'B': x = WINDOW_WIDTH/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; y = WINDOW_HEIGHT - VEHICLE_WIDTH; break;
+            default: continue; 
         }
-        SDL_RenderFillRect(renderer, &vehicleRect);
+        printf("Attempting to enqueue vehicle at x=%d, y=%d, lane=%c\n", x, y, lane);
+        fflush(stdout);       
+        enqueueFreeLaneVehicle(x, y, FREE_VEHICLE_SPEED, lane);
     }
-    fclose(file);
+    
+    fclose(file); // Now clear the file
+    file = fopen("vehicles.data", "w");  // Open file in write mode (overwrite)
+    if (file) {
+        fclose(file);
+        printf("Cleared vehicles.data after processing\n");
+    } else {
+        perror("Failed to clear vehicles.data");
+    }
 }
+*/
+
 
 void drawTrafficLights(SDL_Renderer *renderer){
     // draw light box
@@ -142,7 +348,7 @@ void printMessageHelper(const char* message, int count) {
 }
 
 int main() {
-    pthread_t tQueue, tReadFile;
+   // pthread_t tQueue, tReadFile;
     SDL_Window* window = NULL;
     SDL_Renderer* renderer = NULL;    
     SDL_Event event;    
@@ -158,8 +364,11 @@ int main() {
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     
-    pthread_t vehicleThread;
-    pthread_create(&vehicleThread, NULL, updateVehicles, renderer);
+    pthread_t vehicleThread, freeLaneThread;
+    pthread_create(&freeLaneThread, NULL, freeLaneControl, NULL);
+    pthread_create(&vehicleThread, NULL, updateVehicles, (void*)renderer);
+    
+
 
     // we need to create seprate long running thread for the queue processing and light
     // pthread_create(&tLight, NULL, refreshLight, &sharedData);
@@ -177,6 +386,12 @@ int main() {
 
     }
     //SDL_DestroyMutex(mutex);
+   
+    pthread_join(vehicleThread, NULL);
+   
+   
+    
+    pthread_join(freeLaneThread, NULL);
     if (renderer) SDL_DestroyRenderer(renderer);
     if (window) SDL_DestroyWindow(window);
     // pthread_kil
@@ -368,14 +583,11 @@ void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font) {
         //
 
     
-    displayText(renderer, font, "A",400, 10);
-    displayText(renderer, font, "B",400,770);
-    displayText(renderer, font, "D",10,400);
-    displayText(renderer, font, "C",770,400);
+    
     
 }
 
-
+/*
 void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int y){
     // display necessary text
     SDL_Color textColor = {0, 0, 0, 255}; // black color
@@ -389,7 +601,7 @@ void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int 
     // SDL_Log("TTF_Error: %s\n", TTF_GetError());
     SDL_RenderCopy(renderer, texture, NULL, &textRect);
     // SDL_Log("TTF_Error: %s\n", TTF_GetError());
-}
+}*/
 
 
 void refreshLight(SDL_Renderer *renderer, SharedData* sharedData){
