@@ -29,22 +29,25 @@
 #define VEHICLE_WIDTH 17
 #define LIGHT_WIDTH 25
 #define LIGHT_HEIGHT 25
-#define FREE_VEHICLE_SPEED 5
+#define FREE_VEHICLE_SPEED 7
+#define CENTRAL_VEHICLE_SPEED 4
 
-typedef struct FreeLaneVehicle {
+typedef struct LaneVehicle {
     int x, y;
     int speed;
     char lane;
-    struct FreeLaneVehicle* next;
-} FreeLaneVehicle;
+   
+    struct LaneVehicle* next;
+} LaneVehicle;
 
 typedef struct{
-FreeLaneVehicle* front;
-FreeLaneVehicle* rear;
-} FreeLaneQueue;
+LaneVehicle* front;
+LaneVehicle* rear;
+} LaneQueue;
 
 
-FreeLaneQueue laneQueues[4] = {{NULL, NULL}, {NULL, NULL}, {NULL, NULL}, {NULL, NULL}};
+LaneQueue freeLaneQueues[4] = {{NULL, NULL}, {NULL, NULL}, {NULL, NULL}, {NULL, NULL}};
+LaneQueue centralLaneQueues[4] = {{NULL, NULL}, {NULL, NULL}, {NULL, NULL}, {NULL, NULL}};
 
 
 typedef struct{
@@ -63,13 +66,13 @@ void* chequeQueue(void* arg);
 void* readAndParseFile(void* arg);
 void drawVehicles( SDL_Renderer *renderer);
 void drawTrafficLights(SDL_Renderer *renderer);
-//void freeLaneControl(SDL_Renderer *renderer);
+//void LaneControl(SDL_Renderer *renderer);
 void updateVehicles(void* arg);
 void drawFreeLaneVehicles(SDL_Renderer* renderer);
 void enqueueFreeLaneVehicle(int x, int y, int speed, char lane);
 void dequeueFreeLaneVehicle();
 void updateFreeLaneVehiclePositions();
-void *freeLaneControl(void *arg);
+void *LaneControl(void *arg);
 
 
 bool running = true;
@@ -81,17 +84,14 @@ void updateVehicles(void* arg){
         SDL_RenderClear(renderer);
         drawRoadsAndLane(renderer, NULL);
         drawTrafficLights(renderer);
-        freeLaneControl(renderer);
+        LaneControl(renderer);
         SDL_RenderPresent(renderer);
         sleep(1); // Update every second
     }
 }*/
 
-
-
-// ** Enqueue vehicle into the correct lane queue **
-void enqueueFreeLaneVehicle(int x, int y, int speed, char lane) {
-    FreeLaneVehicle* newVehicle = (FreeLaneVehicle*)malloc(sizeof(FreeLaneVehicle));
+void enqueueCentralLaneVehicle(int x, int y, int speed, char lane){
+    LaneVehicle* newVehicle = (LaneVehicle*)malloc(sizeof(LaneVehicle));
     newVehicle->x = x;
     newVehicle->y = y;
     newVehicle->speed = speed;
@@ -102,29 +102,49 @@ void enqueueFreeLaneVehicle(int x, int y, int speed, char lane) {
    
     if (laneIndex < 0 || laneIndex > 3) return;  // Ignore invalid lane
 
-    if (laneQueues[laneIndex].front == NULL) {
-        laneQueues[laneIndex].front = laneQueues[laneIndex].rear = newVehicle;
+    if (freeLaneQueues[laneIndex].front == NULL) {
+        freeLaneQueues[laneIndex].front = freeLaneQueues[laneIndex].rear = newVehicle;
     } else {
-        laneQueues[laneIndex].rear->next = newVehicle;
-        laneQueues[laneIndex].rear = newVehicle;
+        freeLaneQueues[laneIndex].rear->next = newVehicle;
+        freeLaneQueues[laneIndex].rear = newVehicle;
+    }
+};
+
+// ** Enqueue vehicle into the correct lane queue **
+void enqueueFreeLaneVehicle(int x, int y, int speed, char lane) {
+    LaneVehicle* newVehicle = (LaneVehicle*)malloc(sizeof(LaneVehicle));
+    newVehicle->x = x;
+    newVehicle->y = y;
+    newVehicle->speed = speed;
+    newVehicle->lane = lane;
+    newVehicle->next = NULL;
+
+    int laneIndex = lane - 'A'; // Convert A, B, C, D to 0, 1, 2, 3
+   
+    if (laneIndex < 0 || laneIndex > 3) return;  // Ignore invalid lane
+
+    if (freeLaneQueues[laneIndex].front == NULL) {
+        freeLaneQueues[laneIndex].front = freeLaneQueues[laneIndex].rear = newVehicle;
+    } else {
+        freeLaneQueues[laneIndex].rear->next = newVehicle;
+        freeLaneQueues[laneIndex].rear = newVehicle;
     }
 }
 
-// ** Remove vehicles that have moved out of screen bounds **
-void dequeueFreeLaneVehicles() {
+void dequeueCentralLaneVehicles() {
     for (int i = 0; i < 4; i++) {
-        FreeLaneVehicle* current = laneQueues[i].front;
-        FreeLaneVehicle* prev = NULL;
+        LaneVehicle* current = centralLaneQueues[i].front;
+        LaneVehicle* prev = NULL;
 
         while (current) {
             if (current->x > WINDOW_WIDTH || current->y > WINDOW_HEIGHT ||
                 current->x < 0 || current->y < 0) {
 
-                FreeLaneVehicle* toDelete = current;
+                LaneVehicle* toDelete = current;
                 current = current->next;
 
                 if (prev == NULL) { // If deleting head
-                    laneQueues[i].front = current;
+                    centralLaneQueues[i].front = current;
                 } else {
                     prev->next = current;
                 }
@@ -136,17 +156,91 @@ void dequeueFreeLaneVehicles() {
             }
         }
 
-        if (laneQueues[i].front == NULL) {
-            laneQueues[i].rear = NULL;
+        if (centralLaneQueues[i].front == NULL) {
+            centralLaneQueues[i].rear = NULL;
         }
     }
 }
 
+// ** Remove vehicles that have moved out of screen bounds **
+void dequeueFreeLaneVehicles() {
+    for (int i = 0; i < 4; i++) {
+        LaneVehicle* current = freeLaneQueues[i].front;
+        LaneVehicle* prev = NULL;
+
+        while (current) {
+            if (current->x > WINDOW_WIDTH || current->y > WINDOW_HEIGHT ||
+                current->x < 0 || current->y < 0) {
+
+                LaneVehicle* toDelete = current;
+                current = current->next;
+
+                if (prev == NULL) { // If deleting head
+                    freeLaneQueues[i].front = current;
+                } else {
+                    prev->next = current;
+                }
+
+                free(toDelete);
+            } else {
+                prev = current;
+                current = current->next;
+            }
+        }
+
+        if (freeLaneQueues[i].front == NULL) {
+            freeLaneQueues[i].rear = NULL;
+        }
+    }
+}
+
+void updateCentralLaneVehiclePositions() {
+    for (int i = 0; i < 4; i++) {
+        LaneVehicle* current = centralLaneQueues[i].front;
+
+        while (current) {
+            switch (current->lane) {
+                
+                case 'D': 
+                
+                if (current->x > WINDOW_WIDTH/2-ROAD_WIDTH/2+5){
+                    current->y -= current->speed; }
+                else{
+                    current->x += current->speed; 
+                }
+                break; // Right-moving
+                case 'A': 
+                if (current->y > WINDOW_HEIGHT/2-ROAD_WIDTH/2+5){
+                    current->x += current->speed;  }
+                else{
+                    current->y += current->speed; 
+                }
+                break; // Down-moving
+                case 'C': 
+                if (current->x < WINDOW_WIDTH/2+ROAD_WIDTH/2-VEHICLE_WIDTH-5){
+                    current->y += current->speed;} 
+                else{
+                    current->x -= current->speed;
+                }    
+                break; // Left-moving
+                case 'B': 
+                if (current->y < WINDOW_HEIGHT/2+ROAD_WIDTH/2-VEHICLE_HEIGHT-5){
+                    current->x -= current->speed;} 
+                else{
+                    current->y -= current->speed;
+                }    
+                break; // Up-moving
+            }
+            current = current->next;
+        }
+        dequeueCentralLaneVehicles();
+    }
+}
 
 // ** Move vehicles forward **
 void updateFreeLaneVehiclePositions() {
     for (int i = 0; i < 4; i++) {
-        FreeLaneVehicle* current = laneQueues[i].front;
+        LaneVehicle* current = freeLaneQueues[i].front;
 
         while (current) {
             switch (current->lane) {
@@ -187,12 +281,38 @@ void updateFreeLaneVehiclePositions() {
     }
 }
 
+void drawCentralLaneVehicles(SDL_Renderer* renderer) {
+    SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
+
+    for (int i = 0; i < 4; i++) {
+        LaneVehicle* current = centralLaneQueues[i].front;
+        SDL_Rect vehicleRect;
+        while (current) {
+            if(current->lane == 'D' || current->lane == 'C'){
+                vehicleRect.x= current->x;
+                vehicleRect.y= current->y;
+                vehicleRect.w= VEHICLE_WIDTH;
+                vehicleRect.h= VEHICLE_HEIGHT;
+            }
+            if(current->lane == 'A' || current->lane == 'B'){
+                vehicleRect.x= current->x;
+                vehicleRect.y= current->y;
+                vehicleRect.w= VEHICLE_HEIGHT;
+                vehicleRect.h= VEHICLE_WIDTH;
+            }
+            
+            
+            SDL_RenderFillRect(renderer, &vehicleRect);
+            current = current->next;
+        }
+    }
+}
 
 void drawFreeLaneVehicles(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
 
     for (int i = 0; i < 4; i++) {
-        FreeLaneVehicle* current = laneQueues[i].front;
+        LaneVehicle* current = freeLaneQueues[i].front;
         SDL_Rect vehicleRect;
         while (current) {
             if(current->lane == 'D' || current->lane == 'C'){
@@ -222,9 +342,11 @@ void updateVehicles(void* arg){
         SDL_RenderClear(renderer);
         drawRoadsAndLane(renderer, NULL);
         drawTrafficLights(renderer);
-        //freeLaneControl();
+        //LaneControl();
+        updateCentralLaneVehiclePositions();
         updateFreeLaneVehiclePositions();
         drawFreeLaneVehicles(renderer);
+        drawCentralLaneVehicles(renderer);
         SDL_RenderPresent(renderer);
         SDL_Delay(50); // Slows down the update rate for smoother movement
     }
@@ -232,7 +354,7 @@ void updateVehicles(void* arg){
 
 
 
-void *freeLaneControl(void *arg) {
+void *LaneControl(void *arg) {
     int server_fd, client_socket;
     struct sockaddr_in server_addr, client_addr;
     int addrlen = sizeof(client_addr);
@@ -293,17 +415,51 @@ void *freeLaneControl(void *arg) {
             char lane;
             if (sscanf(buffer, "%9[^:]:%c", vehicleID, &lane) != 2) continue;
 
-            int x = 0, y = 0;
+            int x = 0, y = 0, laneNumber=0;
             switch (lane) {
-                case 'D': x = 0; y = WINDOW_HEIGHT/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; break;
-                case 'A': x = WINDOW_WIDTH/2 + ROAD_WIDTH/4 + 5; y = 0; break;
-                case 'C': x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5; break;
-                case 'B': x = WINDOW_WIDTH/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; y = WINDOW_HEIGHT - VEHICLE_WIDTH; break;
+                case 'D': 
+                if (rand()%2){
+                    x = 0; y = WINDOW_HEIGHT/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5;
+                    laneNumber=3;//free lane
+                }else{
+                    x = 0; y = WINDOW_HEIGHT/2  - VEHICLE_HEIGHT - 5;
+                    laneNumber=2;//central lane
+                }break;
+
+                case 'A': 
+                if (rand()%2){
+                    x = WINDOW_WIDTH/2 + ROAD_WIDTH/4 + 5; y = 0; 
+                    laneNumber=3;//free lane
+                }else{
+                    x = WINDOW_WIDTH/2 + 5; y = 0; 
+                    laneNumber=2;//central lane
+                }break;
+
+                case 'C': 
+                if (rand()%2){
+                    x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5; 
+                    laneNumber=3;//free lane
+                }else{
+                    x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + 5; 
+                    laneNumber=2;//central lane
+                }break;
+
+                case 'B':  
+                if (rand()%2){
+                    x = WINDOW_WIDTH/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; y = WINDOW_HEIGHT - VEHICLE_WIDTH;
+                    laneNumber=3;//free lane
+                }else{
+                    x = WINDOW_WIDTH/2 - VEHICLE_HEIGHT - 5; y = WINDOW_HEIGHT - VEHICLE_WIDTH;
+                    laneNumber=2;//central lane
+                }break;
+
                 default: continue;
             }
 
-            printf("Enqueuing vehicle %s at x=%d, y=%d, lane=%c\n", vehicleID, x, y, lane);
-            enqueueFreeLaneVehicle(x, y, FREE_VEHICLE_SPEED, lane);
+            printf("Enqueuing vehicle %s at x=%d, y=%d, lane=%c, laneNumber=%d\n", vehicleID, x, y, lane, lane);
+            
+            if(laneNumber==3){enqueueFreeLaneVehicle(x, y, FREE_VEHICLE_SPEED, lane);}
+            if(laneNumber==2){enqueueCentralLaneVehicle(x, y, CENTRAL_VEHICLE_SPEED, lane);}
         }
     }
     shutdown(server_fd, SHUT_RDWR); 
@@ -312,9 +468,9 @@ void *freeLaneControl(void *arg) {
 
 /*
 // ** Process and enqueue vehicles from file **
-void freeLaneControl(SDL_Renderer *renderer){
+void LaneControl(SDL_Renderer *renderer){
     
-        printf("freeLaneControl() function called!\n");
+        printf("LaneControl() function called!\n");
         fflush(stdout);  // Force print immediately
     FILE *file= fopen(VEHICLE_FILE, "r");
     if (file == NULL) {
@@ -404,8 +560,8 @@ int main() {
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     
-    pthread_t vehicleThread, freeLaneThread;
-    pthread_create(&freeLaneThread, NULL, freeLaneControl, NULL);
+    pthread_t vehicleThread, LaneThread;
+    pthread_create(&LaneThread, NULL, LaneControl, NULL);
     pthread_create(&vehicleThread, NULL, updateVehicles, (void*)renderer);
     
 
@@ -431,7 +587,7 @@ int main() {
    
    
     
-    pthread_join(freeLaneThread, NULL);
+    pthread_join(LaneThread, NULL);
     if (renderer) SDL_DestroyRenderer(renderer);
     if (window) SDL_DestroyWindow(window);
     // pthread_kil
