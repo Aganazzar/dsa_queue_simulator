@@ -11,10 +11,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-
 #define SIMULATOR_PORT 7000
 #define BUFFER_SIZE 100
-//#define VEHICLE_FILE "vehicles.data"
 
 #define MAX_LINE_LENGTH 20
 #define MAIN_FONT "/usr/share/fonts/TTF/DejaVuSans.ttf"
@@ -27,8 +25,11 @@
 
 #define VEHICLE_HEIGHT 10
 #define VEHICLE_WIDTH 17
-#define LIGHT_WIDTH 25
-#define LIGHT_HEIGHT 25
+
+#define BOX_WIDTH 25
+#define BOX_HEIGHT 25
+#define LIGHT_WIDTH 12
+#define LIGHT_HEIGHT 12
 #define FREE_VEHICLE_SPEED 7
 #define CENTRAL_VEHICLE_SPEED 4
 #define TIME_PER_VEHICLE 3
@@ -37,14 +38,12 @@ typedef struct {
     bool isRed;
 } TrafficLight;
 
-TrafficLight trafficLights[4];  // Global array for 4 lanes
-
+TrafficLight trafficLights[4];  // Global array for 4 lights
 
 typedef struct LaneVehicle {
     int x, y;
     int speed;
     char lane;
-   
     struct LaneVehicle* next;
 } LaneVehicle;
 
@@ -53,32 +52,20 @@ LaneVehicle* front;
 LaneVehicle* rear;
 } LaneQueue;
 
-
 LaneQueue freeLaneQueues[4] = {{NULL, NULL}, {NULL, NULL}, {NULL, NULL}, {NULL, NULL}};
 LaneQueue centralLaneQueues[4] = {{NULL, NULL}, {NULL, NULL}, {NULL, NULL}, {NULL, NULL}};
 
-
-typedef struct{
-    int currentLight;
-    int nextLight;
-} SharedData;
-
-
-// Function declarations
 bool initializeSDL(SDL_Window **window, SDL_Renderer **renderer);
 void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font);
 void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int y);
-void drawLightForB(SDL_Renderer* renderer, bool isRed);
-//void refreshLight(SDL_Renderer *renderer, SharedData* sharedData);
 void refreshTrafficLight(void* arg);
-void* chequeQueue(void* arg);
-void* readAndParseFile(void* arg);
-void drawVehicles( SDL_Renderer *renderer);
 void drawTrafficLights(SDL_Renderer *renderer);
-//void LaneControl(SDL_Renderer *renderer);
 void updateVehicles(void* arg);
 void drawFreeLaneVehicles(SDL_Renderer* renderer);
+void drawCentralLaneVehicles(SDL_Renderer* renderer);
 void enqueueFreeLaneVehicle(int x, int y, int speed, char lane);
+void enqueueCentralLaneVehicle(int x, int y, int speed, char lane);
+void dequeueCentralLaneVehicles();
 void dequeueFreeLaneVehicle();
 void updateFreeLaneVehiclePositions();
 void *LaneControl(void *arg);
@@ -86,18 +73,6 @@ void *LaneControl(void *arg);
 
 bool running = true;
 
-/*
-void updateVehicles(void* arg){
-    SDL_Renderer* renderer = (SDL_Renderer*)arg;
-    while(running){
-        SDL_RenderClear(renderer);
-        drawRoadsAndLane(renderer, NULL);
-        drawTrafficLights(renderer);
-        LaneControl(renderer);
-        SDL_RenderPresent(renderer);
-        sleep(1); // Update every second
-    }
-}*/
 
 void enqueueCentralLaneVehicle(int x, int y, int speed, char lane){
     LaneVehicle* newVehicle = (LaneVehicle*)malloc(sizeof(LaneVehicle));
@@ -218,16 +193,16 @@ void updateCentralLaneVehiclePositions() {
             if (prev && prev->lane == current->lane) {
                  // Default to false unless a valid condition is met
             
-                if (current->lane == 'D' && (prev->x - current->x) > (VEHICLE_WIDTH + 5)) {
+                if (current->lane == 'D' && (prev->x - current->x) > (VEHICLE_WIDTH + 15)) {
                     canMove = true;
                 } 
-                else if (current->lane == 'A' && (prev->y - current->y) > (VEHICLE_WIDTH + 5)) {
+                else if (current->lane == 'A' && (prev->y - current->y) > (VEHICLE_WIDTH + 15)) {
                     canMove = true;
                 } 
-                else if (current->lane == 'C' && (current->x - prev->x) > (VEHICLE_WIDTH + 5)) {
+                else if (current->lane == 'C' && (current->x - prev->x) > (VEHICLE_WIDTH + 15)) {
                     canMove = true;
                 } 
-                else if (current->lane == 'B' && (current->y - prev->y) > (VEHICLE_WIDTH + 5)) {
+                else if (current->lane == 'B' && (current->y - prev->y) > (VEHICLE_WIDTH + 15)) {
                     canMove = true;
                 }
             }
@@ -240,7 +215,7 @@ void updateCentralLaneVehiclePositions() {
                     if(!trafficLights[0].isRed){
                         current->x += current->speed;  //keept it moving.
                     }else{
-                        if(current->x < WINDOW_WIDTH/2-ROAD_WIDTH/2-VEHICLE_WIDTH-5){
+                        if(current->x < WINDOW_WIDTH/2-ROAD_WIDTH/2-VEHICLE_WIDTH){
                             if(canMove){current->x += current->speed;}  //keept it moving.
                         }
                     }
@@ -254,7 +229,7 @@ void updateCentralLaneVehiclePositions() {
                     if(!trafficLights[1].isRed){
                         current->y += current->speed;  //keept it moving.
                     }else{
-                        if(current->y < WINDOW_HEIGHT/2-ROAD_WIDTH/2-VEHICLE_HEIGHT-5){
+                        if(current->y < WINDOW_HEIGHT/2-ROAD_WIDTH/2-VEHICLE_HEIGHT){
                             if(canMove){current->y += current->speed;}  //keept it moving.
                         }
                     }
@@ -268,7 +243,7 @@ void updateCentralLaneVehiclePositions() {
                     if(!trafficLights[2].isRed){
                         current->x -= current->speed;  //keept it moving.
                     }else{
-                        if(current->x > WINDOW_WIDTH/2+ROAD_WIDTH/2+5){
+                        if(current->x > WINDOW_WIDTH/2+ROAD_WIDTH/2){
                             if(canMove){current->x -= current->speed;}  //keept it moving.
                         }
                     }
@@ -282,7 +257,7 @@ void updateCentralLaneVehiclePositions() {
                     if(!trafficLights[3].isRed){
                         current->y -= current->speed;  //keept it moving.
                     }else{
-                        if(current->y > WINDOW_HEIGHT/2+ROAD_WIDTH/2+5){
+                        if(current->y > WINDOW_HEIGHT/2+ROAD_WIDTH/2){
                             if(canMove){current->y -= current->speed;}  //keept it moving.
                         }
                     }
@@ -418,9 +393,7 @@ int countVehiclesInQueue(LaneVehicle* front) {
     return count;
 }
 
-void priorityChecker(){
 
-}
 void refreshTrafficLight(void* arg) {
     for (int i = 0; i < 4; i++) {
         trafficLights[i].isRed = true;
@@ -556,37 +529,37 @@ void *LaneControl(void *arg) {
             switch (lane) {
                 case 'D': 
                 if (rand()%2){
-                    x = 0; y = WINDOW_HEIGHT/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5;
+                    x = 0; y = WINDOW_HEIGHT/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 13;
                     laneNumber=3;//free lane
                 }else{
-                    x = 0; y = WINDOW_HEIGHT/2  - VEHICLE_HEIGHT - 5;
+                    x = 0; y = WINDOW_HEIGHT/2  - VEHICLE_HEIGHT - 13;
                     laneNumber=2;//central lane
                 }break;
 
                 case 'A': 
                 if (rand()%2){
-                    x = WINDOW_WIDTH/2 + ROAD_WIDTH/4 + 5; y = 0; 
+                    x = WINDOW_WIDTH/2 + ROAD_WIDTH/4 + 13; y = 0; 
                     laneNumber=3;//free lane
                 }else{
-                    x = WINDOW_WIDTH/2 + 5; y = 0; 
+                    x = WINDOW_WIDTH/2 + 13; y = 0; 
                     laneNumber=2;//central lane
                 }break;
 
                 case 'C': 
                 if (rand()%2){
-                    x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5; 
+                    x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 13; 
                     laneNumber=3;//free lane
                 }else{
-                    x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + 5; 
+                    x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + 13; 
                     laneNumber=2;//central lane
                 }break;
 
                 case 'B':  
                 if (rand()%2){
-                    x = WINDOW_WIDTH/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; y = WINDOW_HEIGHT - VEHICLE_WIDTH;
+                    x = WINDOW_WIDTH/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 13; y = WINDOW_HEIGHT - VEHICLE_WIDTH;
                     laneNumber=3;//free lane
                 }else{
-                    x = WINDOW_WIDTH/2 - VEHICLE_HEIGHT - 5; y = WINDOW_HEIGHT - VEHICLE_WIDTH;
+                    x = WINDOW_WIDTH/2 - VEHICLE_HEIGHT - 13; y = WINDOW_HEIGHT - VEHICLE_WIDTH;
                     laneNumber=2;//central lane
                 }break;
 
@@ -607,87 +580,53 @@ void *LaneControl(void *arg) {
     close(server_fd);
 }
 
-/*
-// ** Process and enqueue vehicles from file **
-void LaneControl(SDL_Renderer *renderer){
-    
-        printf("LaneControl() function called!\n");
-        fflush(stdout);  // Force print immediately
-    FILE *file= fopen(VEHICLE_FILE, "r");
-    if (file == NULL) {
-        perror("fopen failed");
-        return;
-    }
-
-    char line[256];
-    while (fgets(line, sizeof(line), file)) {
-        char vehicleID[10];
-        char lane;
-        if (sscanf(line, "%9[^:]:%c", vehicleID, &lane) != 2) continue;
-
-        int x = 0, y = 0;
-        switch (lane) {
-            case 'D': x = 0; y = WINDOW_HEIGHT/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; break;
-            case 'A': x = WINDOW_WIDTH/2 + ROAD_WIDTH/4 + 5; y = 0; break;
-            case 'C': x = WINDOW_WIDTH - VEHICLE_WIDTH; y = WINDOW_HEIGHT/2 + ROAD_WIDTH/4 + 5; break;
-            case 'B': x = WINDOW_WIDTH/2 - ROAD_WIDTH/4 - VEHICLE_HEIGHT - 5; y = WINDOW_HEIGHT - VEHICLE_WIDTH; break;
-            default: continue; 
-        }
-        printf("Attempting to enqueue vehicle at x=%d, y=%d, lane=%c\n", x, y, lane);
-        fflush(stdout);       
-        enqueueFreeLaneVehicle(x, y, FREE_VEHICLE_SPEED, lane);
-    }
-    
-    fclose(file); // Now clear the file
-    file = fopen("vehicles.data", "w");  // Open file in write mode (overwrite)
-    if (file) {
-        fclose(file);
-        printf("Cleared vehicles.data after processing\n");
-    } else {
-        perror("Failed to clear vehicles.data");
-    }
-}
-*/
-
-
 void drawTrafficLights(SDL_Renderer *renderer){
     // draw light box
+    //the traffic box
+    int lightX[4]= {WINDOW_WIDTH/2+ROAD_WIDTH/2, WINDOW_WIDTH/2+ROAD_WIDTH/2-BOX_WIDTH, WINDOW_WIDTH/2-ROAD_WIDTH/2-BOX_WIDTH, WINDOW_WIDTH/2-ROAD_WIDTH/2};
+    int boxX[4]= {WINDOW_WIDTH/2+ROAD_WIDTH/2+BOX_HEIGHT, WINDOW_WIDTH/2+ROAD_WIDTH/2-BOX_WIDTH, WINDOW_WIDTH/2-ROAD_WIDTH/2-BOX_WIDTH-BOX_WIDTH,WINDOW_WIDTH/2-ROAD_WIDTH/2};
+    int boxY[4]= {WINDOW_HEIGHT/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2+BOX_HEIGHT, WINDOW_HEIGHT/2+ROAD_WIDTH/2-BOX_HEIGHT, WINDOW_HEIGHT/2-ROAD_WIDTH/2-BOX_HEIGHT-BOX_HEIGHT};
+    int lightY[4]= {WINDOW_HEIGHT/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2-BOX_HEIGHT, WINDOW_HEIGHT/2-ROAD_WIDTH/2-BOX_HEIGHT};
+    
+    //the lights
+    
 
-    int lightX[4]= {WINDOW_WIDTH/2+ROAD_WIDTH/2, WINDOW_WIDTH/2+ROAD_WIDTH/2-LIGHT_WIDTH, WINDOW_WIDTH/2-ROAD_WIDTH/2-LIGHT_WIDTH, WINDOW_WIDTH/2-ROAD_WIDTH/2};
-    int lightY[4]= {WINDOW_HEIGHT/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2-LIGHT_HEIGHT, WINDOW_HEIGHT/2-ROAD_WIDTH/2-LIGHT_HEIGHT};
+    int lightrX[4]={WINDOW_WIDTH/2+ROAD_WIDTH/2+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_WIDTH/2+ROAD_WIDTH/2-BOX_WIDTH +BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_WIDTH/2-ROAD_WIDTH/2-BOX_WIDTH+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_WIDTH/2-ROAD_WIDTH/2+BOX_HEIGHT/2-LIGHT_HEIGHT/2};
+    int lightgX[4]= {WINDOW_WIDTH/2+ROAD_WIDTH/2+BOX_HEIGHT+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_WIDTH/2+ROAD_WIDTH/2-BOX_WIDTH+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_WIDTH/2-ROAD_WIDTH/2-BOX_WIDTH-BOX_WIDTH+BOX_HEIGHT/2-LIGHT_HEIGHT/2,WINDOW_WIDTH/2-ROAD_WIDTH/2+BOX_HEIGHT/2-LIGHT_HEIGHT/2};
+    int lightgY[4]= {WINDOW_HEIGHT/2-ROAD_WIDTH/2+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2+BOX_HEIGHT+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2-BOX_HEIGHT+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2-BOX_HEIGHT-BOX_HEIGHT+BOX_HEIGHT/2-LIGHT_HEIGHT/2};
+    int lightrY[4]= {WINDOW_HEIGHT/2-ROAD_WIDTH/2+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2-BOX_HEIGHT+BOX_HEIGHT/2-LIGHT_HEIGHT/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2-BOX_HEIGHT+BOX_HEIGHT/2-LIGHT_HEIGHT/2};
+
     
     for(int i=0; i<4; i++){
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);  // Black
+        SDL_Rect lightBox1 = {lightX[i], lightY[i], BOX_WIDTH, BOX_HEIGHT};
+        SDL_Rect lightBox2 = {boxX[i], boxY[i], BOX_HEIGHT, BOX_WIDTH};
+        SDL_RenderFillRect(renderer, &lightBox1);
+        SDL_RenderFillRect(renderer, &lightBox2);
+
+    SDL_Rect light1={lightrX[i], lightrY[i], LIGHT_WIDTH, LIGHT_HEIGHT}; 
+    SDL_Rect light2={lightgX[i], lightgY[i], LIGHT_WIDTH, LIGHT_HEIGHT};
+    SDL_SetRenderDrawColor(renderer, 0, 51, 0, 255);  // Green
+ 
+    SDL_RenderFillRect(renderer, &light1);
+    SDL_SetRenderDrawColor(renderer, 51, 0, 0, 255);  // Red
+    SDL_RenderFillRect(renderer, &light2);
+
+         
     if (trafficLights[i].isRed) {
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);  // Red
+        SDL_RenderFillRect(renderer, &light2);
     } else {
         SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);  // Green
+        SDL_RenderFillRect(renderer, &light1);
     }
-
-    SDL_Rect lightBox = {lightX[i], lightY[i], LIGHT_WIDTH, LIGHT_HEIGHT};
-    SDL_RenderFillRect(renderer, &lightBox);
+    
+   
     };
     
 }
 
-void drawVehicles( SDL_Renderer *renderer){
-    SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
-     //central lanes
-     SDL_Rect vehicleD = {0 , WINDOW_HEIGHT/2 -VEHICLE_HEIGHT - 5 , VEHICLE_WIDTH, VEHICLE_HEIGHT};//x,y,w,h
-     SDL_Rect vehicleA = {WINDOW_WIDTH/2+5, 0, VEHICLE_HEIGHT, VEHICLE_WIDTH};
-     SDL_Rect vehicleC = {WINDOW_WIDTH-VEHICLE_WIDTH, WINDOW_HEIGHT/2  + 5 , VEHICLE_WIDTH, VEHICLE_HEIGHT};
-     SDL_Rect vehicleB = {WINDOW_WIDTH/2- VEHICLE_HEIGHT -5, WINDOW_HEIGHT-VEHICLE_WIDTH, VEHICLE_HEIGHT, VEHICLE_WIDTH};
- 
-   
-    SDL_RenderFillRect(renderer, &vehicleD);
-    SDL_RenderFillRect(renderer, &vehicleC);
-    SDL_RenderFillRect(renderer, &vehicleB);
-    SDL_RenderFillRect(renderer, &vehicleA);
-    
-}
-
-void printMessageHelper(const char* message, int count) {
-    for (int i = 0; i < count; i++) printf("%s\n", message);
-}
 
 int main() {
    // pthread_t tQueue, tReadFile;
@@ -704,29 +643,20 @@ int main() {
     TTF_Font* font = TTF_OpenFont(MAIN_FONT, 24);
     if (!font) SDL_Log("Failed to load font: %s", TTF_GetError());
 
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    //SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     
     pthread_t vehicleThread, LaneThread, trafficLightThread;
     pthread_create(&trafficLightThread, NULL, refreshTrafficLight, NULL);
     pthread_create(&LaneThread, NULL, LaneControl, NULL);
     pthread_create(&vehicleThread, NULL, updateVehicles, (void*)renderer);
-    
-
-
-    // we need to create seprate long running thread for the queue processing and light
-    // pthread_create(&tLight, NULL, refreshLight, &sharedData);
-    //pthread_create(&tQueue, NULL, chequeQueue, &sharedData);
-    //pthread_create(&tReadFile, NULL, readAndParseFile, NULL);
-    // readAndParseFile();
-
-    // Continue the UI thread
+  
     bool running = true;
     while (running) {
         // update light
        // refreshLight(renderer, &sharedData);
         while (SDL_PollEvent(&event))
            { if (event.type == SDL_QUIT) {running = false;}}
-
+           SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Black color
            SDL_RenderClear(renderer);
            drawRoadsAndLane(renderer, NULL);
            drawTrafficLights(renderer);
@@ -782,65 +712,11 @@ bool initializeSDL(SDL_Window **window, SDL_Renderer **renderer) {
         SDL_Quit();
         return false;
     }
-
     return true;
 }
 
-
-void swap(int *a, int *b) {
-    int temp = *a;
-    *a = *b;
-    *b = temp;
-}
-
-
-void drawArrwow(SDL_Renderer* renderer, int x1, int y1, int x2, int y2, int x3, int y3) {
-    // Sort vertices by ascending Y (bubble sort approach)
-    if (y1 > y2) { swap(&y1, &y2); swap(&x1, &x2); }
-    if (y1 > y3) { swap(&y1, &y3); swap(&x1, &x3); }
-    if (y2 > y3) { swap(&y2, &y3); swap(&x2, &x3); }
-
-    // Compute slopes
-    float dx1 = (y2 - y1) ? (float)(x2 - x1) / (y2 - y1) : 0;
-    float dx2 = (y3 - y1) ? (float)(x3 - x1) / (y3 - y1) : 0;
-    float dx3 = (y3 - y2) ? (float)(x3 - x2) / (y3 - y2) : 0;
-
-    float sx1 = x1, sx2 = x1;
-
-    // Fill first part (top to middle)
-    for (int y = y1; y < y2; y++) {
-        SDL_RenderDrawLine(renderer, (int)sx1, y, (int)sx2, y);
-        sx1 += dx1;
-        sx2 += dx2;
-    }
-
-    sx1 = x2;
-
-    // Fill second part (middle to bottom)
-    for (int y = y2; y <= y3; y++) {
-        SDL_RenderDrawLine(renderer, (int)sx1, y, (int)sx2, y);
-        sx1 += dx3;
-        sx2 += dx2;
-    }
-}
-
-
-void drawLightForB(SDL_Renderer* renderer, bool isRed){
-    // draw light box
-    SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255);
-    SDL_Rect lightBox = {400, 300, 50, 30};
-    SDL_RenderFillRect(renderer, &lightBox);
-    // draw light
-    if(isRed) SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255); // red
-    else SDL_SetRenderDrawColor(renderer, 11, 156, 50, 255);    // green
-    SDL_Rect straight_Light = {405, 305, 20, 20};
-    SDL_RenderFillRect(renderer, &straight_Light);
-    drawArrwow(renderer, 435,305, 435, 305+20, 435+10, 305+10);
-}
-
-
 void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font) {
-    SDL_SetRenderDrawColor(renderer, 211,211,211,255);
+    SDL_SetRenderDrawColor(renderer, 192,192,192,192);
     // Vertical road
     
     SDL_Rect verticalRoad = {WINDOW_WIDTH / 2 - ROAD_WIDTH / 2, 0, ROAD_WIDTH, WINDOW_HEIGHT};
@@ -851,10 +727,15 @@ void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font) {
     SDL_RenderFillRect(renderer, &horizontalRoad);
     // draw horizontal lanes
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-  
+
+        SDL_RenderDrawLine(renderer, WINDOW_WIDTH/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2, WINDOW_WIDTH/2+ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2);
+        SDL_RenderDrawLine(renderer, WINDOW_WIDTH/2+ROAD_WIDTH/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2, WINDOW_WIDTH/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2);
+        SDL_RenderDrawLine(renderer, WINDOW_WIDTH/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2, WINDOW_WIDTH/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2);
+        SDL_RenderDrawLine(renderer, WINDOW_WIDTH/2+ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2, WINDOW_WIDTH/2+ROAD_WIDTH/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2);
         //Road Outlines
         //i=0
         // Horizontal lanes
+       
         SDL_RenderDrawLine(renderer, 
             0, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*0,  // x1,y1
             WINDOW_WIDTH/2 - ROAD_WIDTH/2, WINDOW_HEIGHT/2 - ROAD_WIDTH/2 + LANE_WIDTH*0 // x2, y2
@@ -930,79 +811,4 @@ void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font) {
             WINDOW_WIDTH/2 , 800,
             WINDOW_WIDTH/2 , WINDOW_HEIGHT/2 + ROAD_WIDTH/2
         );
-        //
-
-    
-    
-    
 }
-
-/*
-void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int y){
-    // display necessary text
-    SDL_Color textColor = {0, 0, 0, 255}; // black color
-    SDL_Surface *textSurface = TTF_RenderText_Solid(font, text, textColor);
-    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, textSurface);
-    SDL_FreeSurface(textSurface);
-    SDL_Rect textRect = {x,y,0,0 };
-    SDL_QueryTexture(texture, NULL, NULL, &textRect.w, &textRect.h);
-    SDL_Log("DIM of SDL_Rect %d %d %d %d", textRect.x, textRect.y, textRect.h, textRect.w);
-    // SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    // SDL_Log("TTF_Error: %s\n", TTF_GetError());
-    SDL_RenderCopy(renderer, texture, NULL, &textRect);
-    // SDL_Log("TTF_Error: %s\n", TTF_GetError());
-}*/
-
-
-void refreshLight(SDL_Renderer *renderer, SharedData* sharedData){
-    if(sharedData->nextLight == sharedData->currentLight) return; // early return
-
-    if(sharedData->nextLight == 0){ // trun off all lights
-        drawLightForB(renderer, false);
-    }
-    if(sharedData->nextLight == 2) drawLightForB(renderer, true);
-    else drawLightForB(renderer, false);
-    SDL_RenderPresent(renderer);
-    printf("Light of queue updated from %d to %d\n", sharedData->currentLight,  sharedData->nextLight);
-    // update the light
-    sharedData->currentLight = sharedData->nextLight;
-    fflush(stdout);
-}
-
-
-void* chequeQueue(void* arg){
-    SharedData* sharedData = (SharedData*)arg;
-    int i = 1;
-    while (1) {
-        sharedData->nextLight = 0;
-        sleep(5);
-        sharedData->nextLight = 2;
-        sleep(5);
-    }
-}
-/*
-// you may need to pass the queue on this function for sharing the data
-void* readAndParseFile(void* arg) {
-    while(1){ 
-        FILE* file = fopen(VEHICLE_FILE, "r");
-        if (!file) {
-            perror("Error opening ");
-            continue;
-        }
-
-        char line[MAX_LINE_LENGTH];
-        while (fgets(line, sizeof(line), file)) {
-            // Remove newline if present
-            line[strcspn(line, "\n")] = 0;
-
-            // Split using ':'
-            char* vehicleNumber = strtok(line, ":");
-            char* road = strtok(NULL, ":"); // read next item resulted from split
-
-            if (vehicleNumber && road)  printf("Vehicle: %s, Raod: %s\n", vehicleNumber, road);
-            else printf("Invalid format: %s\n", line);
-        }
-        fclose(file);
-        sleep(2); // manage this time
-    }
-}*/
