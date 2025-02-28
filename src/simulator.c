@@ -31,6 +31,7 @@
 #define LIGHT_HEIGHT 25
 #define FREE_VEHICLE_SPEED 7
 #define CENTRAL_VEHICLE_SPEED 4
+#define TIME_PER_VEHICLE 3
 
 typedef struct {
     bool isRed;
@@ -408,7 +409,18 @@ void updateVehicles(void* arg){
     }
 }
 
+int countVehiclesInQueue(LaneVehicle* front) {
+    int count = 0;
+    while (front) {
+        count++;
+        front = front->next;
+    }
+    return count;
+}
+
+
 void refreshTrafficLight(void* arg){
+
     for (int i = 0; i < 4; i++) {
         trafficLights[i].isRed = true;
     }
@@ -426,9 +438,18 @@ void refreshTrafficLight(void* arg){
             if(i==1){light='A';}
             if(i==2){light='C';}
             if(i==3){light='B';}
-            printf("Traffic Light %c is GREEN\n", light);  // Debug output
-            //printf("Traffic Light %d is GREEN\n", i);  // Debug output
-            sleep(5); // Change light every 3 seconds
+
+            int vehiclesCount = countVehiclesInQueue(centralLaneQueues[1].front)+countVehiclesInQueue(centralLaneQueues[3].front)+countVehiclesInQueue(centralLaneQueues[2].front);
+            
+            int V = (vehiclesCount > 0) ? (vehiclesCount / 3) : 1;
+            if (V < 1) V = 1;  
+
+            int greenTime= V*TIME_PER_VEHICLE;
+            for (int t = greenTime; t > 0 && running; t--) {
+                printf("Traffic Light %c: %d seconds remaining\n", light, t);
+                sleep(1);
+            }
+            
         }
     }
 }
