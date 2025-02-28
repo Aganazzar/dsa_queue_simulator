@@ -110,11 +110,11 @@ void enqueueCentralLaneVehicle(int x, int y, int speed, char lane){
    
     if (laneIndex < 0 || laneIndex > 3) return;  // Ignore invalid lane
 
-    if (freeLaneQueues[laneIndex].front == NULL) {
-        freeLaneQueues[laneIndex].front = freeLaneQueues[laneIndex].rear = newVehicle;
+    if (centralLaneQueues[laneIndex].front == NULL) {
+        centralLaneQueues[laneIndex].front = centralLaneQueues[laneIndex].rear = newVehicle;
     } else {
-        freeLaneQueues[laneIndex].rear->next = newVehicle;
-        freeLaneQueues[laneIndex].rear = newVehicle;
+        centralLaneQueues[laneIndex].rear->next = newVehicle;
+        centralLaneQueues[laneIndex].rear = newVehicle;
     }
 };
 
@@ -205,40 +205,81 @@ void dequeueFreeLaneVehicles() {
 void updateCentralLaneVehiclePositions() {
     for (int i = 0; i < 4; i++) {
         LaneVehicle* current = centralLaneQueues[i].front;
+        LaneVehicle* prev = NULL;
 
         while (current) {
+            bool canMove = true;
+
+            if (prev && prev->lane == current->lane) {
+                if ((current->lane == 'A' || current->lane == 'B') && 
+                    (prev->y > current->y) && (prev->y - current->y < VEHICLE_HEIGHT + 5)) {
+                    canMove = false; // Stop if another vehicle is ahead
+                }
+                if ((current->lane == 'C' || current->lane == 'D') && 
+                    (prev->x < current->x) && (current->x - prev->x < VEHICLE_WIDTH + 5)) {
+                    canMove = false; // Stop if another vehicle is ahead
+                }
+            }
+
             switch (current->lane) {
                 
-                case 'D': 
-                
-                if (current->x > WINDOW_WIDTH/2-ROAD_WIDTH/2+5){
-                    current->y -= current->speed; }
-                else{
-                    current->x += current->speed; 
-                }
+                case 'D':
+                if (current->x <= WINDOW_WIDTH/2-ROAD_WIDTH/2-VEHICLE_WIDTH){
+                    if(!trafficLights[0].isRed){
+                        current->x += current->speed;  //keept it moving.
+                    }else{
+                        if(current->x < WINDOW_WIDTH/2-ROAD_WIDTH/2-VEHICLE_WIDTH-5){
+                            if(canMove){current->x += current->speed;}  //keept it moving.
+                        }
+                    }
+                }else{
+                    current->x += current->speed;  //keept it moving.
+                } 
                 break; // Right-moving
                 case 'A': 
-                if (current->y > WINDOW_HEIGHT/2-ROAD_WIDTH/2+5){
-                    current->x += current->speed;  }
-                else{
-                    current->y += current->speed; 
+
+                if (current->y <= WINDOW_HEIGHT/2-ROAD_WIDTH/2-VEHICLE_HEIGHT){
+                    if(!trafficLights[1].isRed){
+                        current->y += current->speed;  //keept it moving.
+                    }else{
+                        if(current->y < WINDOW_HEIGHT/2-ROAD_WIDTH/2-VEHICLE_HEIGHT-5){
+                            if(canMove){current->y += current->speed;}  //keept it moving.
+                        }
+                    }
+                }else{
+                    current->y += current->speed;  //keept it moving.
                 }
                 break; // Down-moving
                 case 'C': 
-                if (current->x < WINDOW_WIDTH/2+ROAD_WIDTH/2-VEHICLE_WIDTH-5){
-                    current->y += current->speed;} 
-                else{
-                    current->x -= current->speed;
-                }    
-                break; // Left-moving
+                 
+                if (current->x >= WINDOW_WIDTH/2+ROAD_WIDTH/2){
+                    if(!trafficLights[2].isRed){
+                        current->x -= current->speed;  //keept it moving.
+                    }else{
+                        if(current->x > WINDOW_WIDTH/2+ROAD_WIDTH/2+5){
+                            if(canMove){current->x -= current->speed;}  //keept it moving.
+                        }
+                    }
+                }else{
+                    current->x -= current->speed;  //keept it moving.
+                }
+                break;// Left-moving
                 case 'B': 
-                if (current->y < WINDOW_HEIGHT/2+ROAD_WIDTH/2-VEHICLE_HEIGHT-5){
-                    current->x -= current->speed;} 
-                else{
-                    current->y -= current->speed;
-                }    
+
+                if (current->y >= WINDOW_HEIGHT/2+ROAD_WIDTH/2){
+                    if(!trafficLights[3].isRed){
+                        current->y -= current->speed;  //keept it moving.
+                    }else{
+                        if(current->y > WINDOW_HEIGHT/2+ROAD_WIDTH/2+5){
+                            if(canMove){current->y -= current->speed;}  //keept it moving.
+                        }
+                    }
+                }else{
+                    current->y -= current->speed;  //keept it moving.
+                }
                 break; // Up-moving
             }
+            prev= current;
             current = current->next;
         }
         dequeueCentralLaneVehicles();
@@ -347,15 +388,11 @@ void drawFreeLaneVehicles(SDL_Renderer* renderer) {
 void updateVehicles(void* arg){
     SDL_Renderer* renderer = (SDL_Renderer*)arg;
     while(running){
-        SDL_RenderClear(renderer);
-        drawRoadsAndLane(renderer, NULL);
-        drawTrafficLights(renderer);
-        //LaneControl();
-        updateCentralLaneVehiclePositions();
+        
         updateFreeLaneVehiclePositions();
-        drawFreeLaneVehicles(renderer);
-        drawCentralLaneVehicles(renderer);
-        SDL_RenderPresent(renderer);
+      
+        updateCentralLaneVehiclePositions();
+        
         SDL_Delay(50); // Slows down the update rate for smoother movement
     }
 }
@@ -487,10 +524,14 @@ void *LaneControl(void *arg) {
                 default: continue;
             }
 
-            printf("Enqueuing vehicle %s at x=%d, y=%d, lane=%c, laneNumber=%d\n", vehicleID, x, y, lane, lane);
+            //printf("Enqueuing vehicle %s at x=%d, y=%d, lane=%c, laneNumber=%d\n", vehicleID, x, y, lane, laneNumber);
             
-            if(laneNumber==3){enqueueFreeLaneVehicle(x, y, FREE_VEHICLE_SPEED, lane);}
-            if(laneNumber==2){enqueueCentralLaneVehicle(x, y, CENTRAL_VEHICLE_SPEED, lane);}
+            if(laneNumber==3){enqueueFreeLaneVehicle(x, y, FREE_VEHICLE_SPEED, lane);
+            printf("Enqueued freevehicle %s at x=%d, y=%d, lane=%c, laneNumber=%d\n", vehicleID, x, y, lane, laneNumber);
+            }
+            if(laneNumber==2){enqueueCentralLaneVehicle(x, y, CENTRAL_VEHICLE_SPEED, lane);
+            printf("Enqueued centralvehicle %s at x=%d, y=%d, lane=%c, laneNumber=%d\n", vehicleID, x, y, lane, laneNumber);
+            }
         }
     }
     shutdown(server_fd, SHUT_RDWR); 
@@ -617,6 +658,13 @@ int main() {
         while (SDL_PollEvent(&event))
            { if (event.type == SDL_QUIT) {running = false;}}
 
+           SDL_RenderClear(renderer);
+           drawRoadsAndLane(renderer, NULL);
+           drawTrafficLights(renderer);
+           drawFreeLaneVehicles(renderer);
+           drawCentralLaneVehicles(renderer);
+           SDL_RenderPresent(renderer);
+           SDL_Delay(16);  
     }
     //SDL_DestroyMutex(mutex);
    
