@@ -418,38 +418,75 @@ int countVehiclesInQueue(LaneVehicle* front) {
     return count;
 }
 
+void priorityChecker(){
 
-void refreshTrafficLight(void* arg){
-
+}
+void refreshTrafficLight(void* arg) {
     for (int i = 0; i < 4; i++) {
         trafficLights[i].isRed = true;
     }
 
-    while(running){
+    while (running) {
+        int laneA2Count = countVehiclesInQueue(centralLaneQueues[0].front); // Lane A2 count
+        printf("Lane A2 count: %d\n", laneA2Count);
+
+        // High priority case: If Lane A2 has more than 10 vehicles, force it to stay green
+        if (laneA2Count > 10) {
+            printf("Lane A2 has HIGH priority, forcing GREEN light.\n");
+
+            for (int j = 0; j < 4; j++) {
+                trafficLights[j].isRed = true;
+            }
+            trafficLights[1].isRed = false; // Force Lane A green
+
+            while (laneA2Count > 5 && running) { // Keep green until below 5
+                printf("Traffic Light A: Lane A2 priority - %d vehicles remaining\n", laneA2Count);
+                sleep(1);
+                laneA2Count = countVehiclesInQueue(centralLaneQueues[0].front);
+            }
+
+            printf("Lane A2 priority mode ended, resuming normal cycle.\n");
+        }
+
+        // Priority modification: If Lane A2 has between 5 and 10 vehicles, make sure it is next in line
+        int priorityLane = -1;
+        if (laneA2Count >= 5 && laneA2Count <= 10) {
+            priorityLane = 1; // Set A2 (trafficLights[1]) to be next
+            printf("Lane A2 has medium priority, ensuring it is next in line.\n");
+        }
+
+        // NORMAL CYCLE with priority scheduling
         for (int i = 0; i < 4; i++) {
-            int prev = (i == 0) ? 3 : i - 1;
+            int laneIndex = (priorityLane != -1 && i == 0) ? priorityLane : i; // If priority is set, swap first turn
+
+            int prev = (laneIndex == 0) ? 3 : laneIndex - 1;
             trafficLights[prev].isRed = true;
-    
-            // Turn the current light green
-            trafficLights[i].isRed = false;
-    
+            trafficLights[laneIndex].isRed = false; // Set current green
+
             char light;
-            if(i==0){light='D';}
-            if(i==1){light='A';}
-            if(i==2){light='C';}
-            if(i==3){light='B';}
+            if (laneIndex == 0) light = 'D';
+            if (laneIndex == 1) light = 'A';
+            if (laneIndex == 2) light = 'C';
+            if (laneIndex == 3) light = 'B';
 
-            int vehiclesCount = countVehiclesInQueue(centralLaneQueues[1].front)+countVehiclesInQueue(centralLaneQueues[3].front)+countVehiclesInQueue(centralLaneQueues[2].front);
-            
+            int vehiclesCount = countVehiclesInQueue(centralLaneQueues[1].front) +
+                                countVehiclesInQueue(centralLaneQueues[3].front) +
+                                countVehiclesInQueue(centralLaneQueues[2].front);
+
             int V = (vehiclesCount > 0) ? (vehiclesCount / 3) : 1;
-            if (V < 1) V = 1;  
+            if (V < 1) V = 1;
+            int greenTime = V * TIME_PER_VEHICLE;
 
-            int greenTime= V*TIME_PER_VEHICLE;
             for (int t = greenTime; t > 0 && running; t--) {
                 printf("Traffic Light %c: %d seconds remaining\n", light, t);
                 sleep(1);
             }
-            
+
+            // Reset priority after execution
+            if (priorityLane != -1) {
+                priorityLane = -1;
+                i = -1; // Restart cycle normally
+            }
         }
     }
 }
