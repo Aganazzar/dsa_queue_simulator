@@ -6,9 +6,9 @@ A real-time traffic junction simulation, using queues to model incoming and outg
 
 ## Features
 
--Real-time vehicle movement based on queue simulation.
--Traffic light system to regulate vehicle flow.
--Dynamic network communication for external traffic data integration.
+- Real-time vehicle movement based on queue simulation.
+- Traffic light system to regulate vehicle flow.
+- Dynamic network communication for external traffic data integration.
 
 ## Prerequisites
 
