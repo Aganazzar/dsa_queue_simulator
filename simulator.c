@@ -318,7 +318,7 @@ void updateFreeLaneVehiclePositions() {
 }
 
 void drawCentralLaneVehicles(SDL_Renderer* renderer) {
-    SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
+    SDL_SetRenderDrawColor(renderer, 0, 50, 200, 255);
 
     for (int i = 0; i < 4; i++) {
         LaneVehicle* current = centralLaneQueues[i].front;
@@ -345,7 +345,7 @@ void drawCentralLaneVehicles(SDL_Renderer* renderer) {
 }
 
 void drawFreeLaneVehicles(SDL_Renderer* renderer) {
-    SDL_SetRenderDrawColor(renderer, 200, 0, 0, 255);
+    SDL_SetRenderDrawColor(renderer, 255, 255, 100, 255);
 
     for (int i = 0; i < 4; i++) {
         LaneVehicle* current = freeLaneQueues[i].front;
