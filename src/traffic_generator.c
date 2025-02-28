@@ -68,7 +68,7 @@ int main() {
         send(sock, buffer, strlen(buffer), 0);
         printf("Sent: %s\n", buffer);
 
-        sleep(3);
+        sleep(1);
     }
 
     close(sock);

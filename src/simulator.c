@@ -32,6 +32,13 @@
 #define FREE_VEHICLE_SPEED 7
 #define CENTRAL_VEHICLE_SPEED 4
 
+typedef struct {
+    bool isRed;
+} TrafficLight;
+
+TrafficLight trafficLights[4];  // Global array for 4 lanes
+
+
 typedef struct LaneVehicle {
     int x, y;
     int speed;
@@ -61,7 +68,8 @@ bool initializeSDL(SDL_Window **window, SDL_Renderer **renderer);
 void drawRoadsAndLane(SDL_Renderer *renderer, TTF_Font *font);
 void displayText(SDL_Renderer *renderer, TTF_Font *font, char *text, int x, int y);
 void drawLightForB(SDL_Renderer* renderer, bool isRed);
-void refreshLight(SDL_Renderer *renderer, SharedData* sharedData);
+//void refreshLight(SDL_Renderer *renderer, SharedData* sharedData);
+void refreshTrafficLight(void* arg);
 void* chequeQueue(void* arg);
 void* readAndParseFile(void* arg);
 void drawVehicles( SDL_Renderer *renderer);
@@ -352,7 +360,30 @@ void updateVehicles(void* arg){
     }
 }
 
+void refreshTrafficLight(void* arg){
+    for (int i = 0; i < 4; i++) {
+        trafficLights[i].isRed = true;
+    }
 
+    while(running){
+        for (int i = 0; i < 4; i++) {
+            int prev = (i == 0) ? 3 : i - 1;
+            trafficLights[prev].isRed = true;
+    
+            // Turn the current light green
+            trafficLights[i].isRed = false;
+    
+            char light;
+            if(i==0){light='D';}
+            if(i==1){light='A';}
+            if(i==2){light='C';}
+            if(i==3){light='B';}
+            printf("Traffic Light %c is GREEN\n", light);  // Debug output
+            //printf("Traffic Light %d is GREEN\n", i);  // Debug output
+            sleep(5); // Change light every 3 seconds
+        }
+    }
+}
 
 void *LaneControl(void *arg) {
     int server_fd, client_socket;
@@ -511,15 +542,20 @@ void LaneControl(SDL_Renderer *renderer){
 
 void drawTrafficLights(SDL_Renderer *renderer){
     // draw light box
-    SDL_SetRenderDrawColor(renderer, 150, 150, 150, 255);
-    SDL_Rect lightBoxD = {WINDOW_WIDTH/2+ROAD_WIDTH/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2, LIGHT_WIDTH, LIGHT_HEIGHT};
-    SDL_Rect lightBoxA = {WINDOW_WIDTH/2+ROAD_WIDTH/2-LIGHT_WIDTH, WINDOW_HEIGHT/2+ROAD_WIDTH/2, LIGHT_WIDTH, LIGHT_HEIGHT};
-    SDL_Rect lightBoxC = {WINDOW_WIDTH/2-ROAD_WIDTH/2-LIGHT_WIDTH, WINDOW_HEIGHT/2+ROAD_WIDTH/2-LIGHT_HEIGHT, LIGHT_WIDTH, LIGHT_HEIGHT};
-    SDL_Rect lightBoxB = {WINDOW_WIDTH/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2-ROAD_WIDTH/2-LIGHT_HEIGHT, LIGHT_WIDTH, LIGHT_HEIGHT};
-    SDL_RenderFillRect(renderer, &lightBoxD);
-    SDL_RenderFillRect(renderer, &lightBoxA);
-    SDL_RenderFillRect(renderer, &lightBoxC);
-    SDL_RenderFillRect(renderer, &lightBoxB);
+
+    int lightX[4]= {WINDOW_WIDTH/2+ROAD_WIDTH/2, WINDOW_WIDTH/2+ROAD_WIDTH/2-LIGHT_WIDTH, WINDOW_WIDTH/2-ROAD_WIDTH/2-LIGHT_WIDTH, WINDOW_WIDTH/2-ROAD_WIDTH/2};
+    int lightY[4]= {WINDOW_HEIGHT/2-ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2, WINDOW_HEIGHT/2+ROAD_WIDTH/2-LIGHT_HEIGHT, WINDOW_HEIGHT/2-ROAD_WIDTH/2-LIGHT_HEIGHT};
+    
+    for(int i=0; i<4; i++){
+    if (trafficLights[i].isRed) {
+        SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);  // Red
+    } else {
+        SDL_SetRenderDrawColor(renderer, 0, 255, 0, 255);  // Green
+    }
+
+    SDL_Rect lightBox = {lightX[i], lightY[i], LIGHT_WIDTH, LIGHT_HEIGHT};
+    SDL_RenderFillRect(renderer, &lightBox);
+    };
     
 }
 
@@ -560,7 +596,8 @@ int main() {
 
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     
-    pthread_t vehicleThread, LaneThread;
+    pthread_t vehicleThread, LaneThread, trafficLightThread;
+    pthread_create(&trafficLightThread, NULL, refreshTrafficLight, NULL);
     pthread_create(&LaneThread, NULL, LaneControl, NULL);
     pthread_create(&vehicleThread, NULL, updateVehicles, (void*)renderer);
     
@@ -585,7 +622,7 @@ int main() {
    
     pthread_join(vehicleThread, NULL);
    
-   
+   pthread_join(trafficLightThread, NULL);
     
     pthread_join(LaneThread, NULL);
     if (renderer) SDL_DestroyRenderer(renderer);
