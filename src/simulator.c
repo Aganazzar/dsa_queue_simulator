@@ -208,18 +208,29 @@ void updateCentralLaneVehiclePositions() {
         LaneVehicle* prev = NULL;
 
         while (current) {
-            bool canMove = true;
+            bool canMove= false;
+
+            if(!prev){
+                canMove = true;
+            }
 
             if (prev && prev->lane == current->lane) {
-                if ((current->lane == 'A' || current->lane == 'B') && 
-                    (prev->y > current->y) && (prev->y - current->y < VEHICLE_HEIGHT + 5)) {
-                    canMove = false; // Stop if another vehicle is ahead
-                }
-                if ((current->lane == 'C' || current->lane == 'D') && 
-                    (prev->x < current->x) && (current->x - prev->x < VEHICLE_WIDTH + 5)) {
-                    canMove = false; // Stop if another vehicle is ahead
+                 // Default to false unless a valid condition is met
+            
+                if (current->lane == 'D' && (prev->x - current->x) > (VEHICLE_WIDTH + 5)) {
+                    canMove = true;
+                } 
+                else if (current->lane == 'A' && (prev->y - current->y) > (VEHICLE_WIDTH + 5)) {
+                    canMove = true;
+                } 
+                else if (current->lane == 'C' && (current->x - prev->x) > (VEHICLE_WIDTH + 5)) {
+                    canMove = true;
+                } 
+                else if (current->lane == 'B' && (current->y - prev->y) > (VEHICLE_WIDTH + 5)) {
+                    canMove = true;
                 }
             }
+            
 
             switch (current->lane) {
                 
